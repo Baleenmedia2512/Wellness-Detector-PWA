@@ -1,0 +1,176 @@
+import React from 'react';
+
+const NutritionCard = ({ data }) => {
+  if (!data) return null;
+
+  const { nutrition, category, source, servingInfo, itemCount, detailedItems } = data;
+
+  return (
+    <div className="bg-white rounded-xl shadow-lg border-2 border-green-300 overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-green-500 to-green-600 text-white p-4">
+        <h2 className="text-xl font-bold text-center">
+          {category.name}
+        </h2>
+        {itemCount && itemCount > 1 && (
+          <p className="text-center text-green-100 text-sm mt-1">
+            {itemCount} food items analyzed
+          </p>
+        )}
+        {servingInfo && (
+          <p className="text-center text-green-100 text-sm">
+            Per {servingInfo.description || '100g'}
+          </p>
+        )}
+      </div>
+
+      {/* Nutrition Grid */}
+      <div className="p-6">
+        <div className="grid grid-cols-2 gap-4">
+          {/* Calories */}
+          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 text-center">
+            <div className="text-2xl font-bold text-red-600">
+              {nutrition.calories}
+            </div>
+            <div className="text-sm font-medium text-red-700">
+              Calories
+            </div>
+          </div>
+
+          {/* Carbs */}
+          <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4 text-center">
+            <div className="text-2xl font-bold text-yellow-600">
+              {nutrition.carbs}g
+            </div>
+            <div className="text-sm font-medium text-yellow-700">
+              Carbs
+            </div>
+          </div>
+
+          {/* Protein */}
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 text-center">
+            <div className="text-2xl font-bold text-blue-600">
+              {nutrition.protein}g
+            </div>
+            <div className="text-sm font-medium text-blue-700">
+              Protein
+            </div>
+          </div>
+
+          {/* Fat */}
+          <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 text-center">
+            <div className="text-2xl font-bold text-purple-600">
+              {nutrition.fat}g
+            </div>
+            <div className="text-sm font-medium text-purple-700">
+              Fat
+            </div>
+          </div>
+        </div>
+
+        {/* Macronutrient Bar */}
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">
+            Macronutrient Distribution
+          </h3>
+          <div className="flex rounded-lg overflow-hidden h-4 bg-gray-200">
+            {(() => {
+              const totalCals = (nutrition.carbs * 4) + (nutrition.protein * 4) + (nutrition.fat * 9);
+              const carbsPct = totalCals > 0 ? ((nutrition.carbs * 4) / totalCals) * 100 : 0;
+              const proteinPct = totalCals > 0 ? ((nutrition.protein * 4) / totalCals) * 100 : 0;
+              const fatPct = totalCals > 0 ? ((nutrition.fat * 9) / totalCals) * 100 : 0;
+
+              return (
+                <>
+                  <div 
+                    className="bg-yellow-400"
+                    style={{ width: `${carbsPct}%` }}
+                    title={`Carbs: ${carbsPct.toFixed(1)}%`}
+                  />
+                  <div 
+                    className="bg-blue-400"
+                    style={{ width: `${proteinPct}%` }}
+                    title={`Protein: ${proteinPct.toFixed(1)}%`}
+                  />
+                  <div 
+                    className="bg-purple-400"
+                    style={{ width: `${fatPct}%` }}
+                    title={`Fat: ${fatPct.toFixed(1)}%`}
+                  />
+                </>
+              );
+            })()}
+          </div>
+          <div className="flex justify-between text-xs text-gray-600 mt-1">
+            <span>🟡 Carbs</span>
+            <span>🔵 Protein</span>
+            <span>🟣 Fat</span>
+          </div>
+        </div>
+
+        {/* Additional Info */}
+        <div className="mt-6 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between text-sm text-gray-600">
+            <span className="flex items-center">
+              <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+              Data from {source}
+            </span>
+            {data.isRealData && (
+              <span className="text-green-600 font-medium">
+                ✓ Verified Data
+              </span>
+            )}
+          </div>
+
+          {/* Detailed Items */}
+          {detailedItems && detailedItems.length > 1 && (
+            <div className="mt-3">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">📊 Food Breakdown:</h4>
+              <div className="space-y-1">
+                {detailedItems.map((item, index) => (
+                  <div key={index} className="text-xs text-gray-600 bg-gray-50 rounded p-2">
+                    <strong>{item.name}:</strong> {item.calories} cal, {item.protein}g protein, {item.carbs}g carbs, {item.fat}g fat
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Serving Info Details */}
+          {servingInfo && servingInfo.weight && (
+            <div className="text-xs text-gray-500 mt-2">
+              Serving: {servingInfo.weight} {servingInfo.unit}
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="mt-4 flex gap-2">
+          <button 
+            onClick={() => {
+              // You could add functionality to save or share this data
+              navigator.clipboard?.writeText(
+                `${category.name}: ${nutrition.calories} calories, ${nutrition.carbs}g carbs, ${nutrition.protein}g protein, ${nutrition.fat}g fat`
+              );
+            }}
+            className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          >
+            📋 Copy Info
+          </button>
+          
+          <button 
+            onClick={() => {
+              // Reset to search for another food
+              window.location.reload();
+            }}
+            className="flex-1 bg-green-100 text-green-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
+          >
+            🔍 Search Again
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default NutritionCard;

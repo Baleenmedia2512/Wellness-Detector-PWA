@@ -6,7 +6,7 @@ A mobile-friendly Progressive Web App for analyzing food nutrition from images u
 
 - 📱 **Mobile-First Design**: Optimized for smartphone use
 - 📷 **AI Image Analysis**: Advanced food recognition using Google Gemini
-- 🍎 **Smart Food Detection**: Identifies multiple foods in single images
+- � **Smart Food Detection**: Identifies multiple foods in single images
 - 📝 **Text Query Support**: Analyze foods by name when no image available
 - 📊 **Nutrition Display**: Calories, carbs, protein, and fat breakdown
 - 🌐 **PWA Support**: Installable, works offline after initial setup
@@ -20,20 +20,21 @@ npm install
 ```
 
 ### 2. Get Free Gemini API Key
-- Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
-- Sign up for a free account (1,500 requests/day free)
-- Create and copy your API key
+1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Sign up for a free account (1,500 requests/day free)
+3. Create and copy your API key
 
 ### 3. Configure Environment Variables
-Edit `.env` and add your API key:
-```env
-REACT_APP_GEMINI_API_KEY=your_actual_api_key_here
-```
+1. Edit `.env` and add your API key:
+   ```
+   REACT_APP_GEMINI_API_KEY=your_actual_api_key_here
+   ```
 
 ### 4. Run the App
 ```bash
 npm start
 ```
+
 The app will open at `http://localhost:3000`
 
 ## 🤖 AI Analysis Features
@@ -84,9 +85,9 @@ public/
 ## 🎨 Design System
 
 ### Colors:
-- **Primary Green**: `#22c55e`
-- **Light Green**: `#dcfce7`
-- **Dark Green**: `#15803d`
+- Primary Green: `#22c55e`
+- Light Green: `#dcfce7`
+- Dark Green: `#15803d`
 
 ### Components:
 - Rounded corners (`rounded-xl`)
@@ -97,7 +98,6 @@ public/
 ## 🤖 AI Integration
 
 The app uses Google Gemini AI for food analysis:
-
 - **Model**: `gemini-1.5-flash`
 - **Vision Capabilities**: Advanced food recognition in images
 - **Text Analysis**: Natural language food queries
@@ -107,12 +107,12 @@ The app uses Google Gemini AI for food analysis:
 ## 🔧 Customization
 
 ### Adding New Features:
-- **Meal Tracking**: Store analysis history
-- **Recipe Nutrition**: Analyze entire recipes
-- **Goals Setting**: Daily nutrition targets
-- **Export Data**: Save results as PDF/CSV
-- **Barcode Scanner**: Add product lookup
-- **Multiple Serving Sizes**: Portion calculations
+1. **Meal Tracking**: Store analysis history
+2. **Recipe Nutrition**: Analyze entire recipes
+3. **Goals Setting**: Daily nutrition targets
+4. **Export Data**: Save results as PDF/CSV
+5. **Barcode Scanner**: Add product lookup
+6. **Multiple Serving Sizes**: Portion calculations
 
 ### Styling Changes:
 - Modify `tailwind.config.js` for custom colors
@@ -156,28 +156,28 @@ npm run build
 
 ### Common Issues:
 
-**Food not detected in image:**
-- Ensure good lighting and clear focus
-- Try different angles or closer shots
-- Remove cluttered backgrounds
-- Use text mode as fallback
+1. **Food not detected in image**:
+   - Ensure good lighting and clear focus
+   - Try different angles or closer shots
+   - Remove cluttered backgrounds
+   - Use text mode as fallback
 
-**API errors:**
-- Verify Gemini API key is correct
-- Check daily limit (1,500 calls/day free)
-- Ensure internet connection
-- Check image file size (under 10MB)
+2. **API errors**:
+   - Verify Gemini API key is correct
+   - Check daily limit (1,500 calls/day free)
+   - Ensure internet connection
+   - Check image file size (under 10MB)
 
-**PWA not installing:**
-- Must be served over HTTPS
-- Service worker must be registered
-- Manifest.json must be valid
+3. **PWA not installing**:
+   - Must be served over HTTPS
+   - Service worker must be registered
+   - Manifest.json must be valid
 
 ### Error Messages:
-- `"Gemini API key is not configured"` → Add API key to `.env` file
-- `"No food items detected"` → Try better lighting or different angle
-- `"Invalid response format"` → API response parsing issue, try again
-- `"Failed to analyze image"` → Check image quality and internet connection
+- "Gemini API key is not configured" → Add API key to .env file
+- "No food items detected" → Try better lighting or different angle
+- "Invalid response format" → API response parsing issue, try again
+- "Failed to analyze image" → Check image quality and internet connection
 
 ## 📝 License
 
