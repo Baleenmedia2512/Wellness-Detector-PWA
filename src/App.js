@@ -205,12 +205,27 @@ function App() {
         {/* Instructions */}
         <div className="bg-white rounded-xl shadow-lg border border-green-200 p-4">
           <h3 className="font-semibold text-green-700 mb-2">📋 How to use:</h3>
-          <ol className="text-sm text-gray-600 space-y-1 ml-4">
-            <li>1. Take a clear photo of your food</li>
-            <li>2. Make sure the food is well-lit and visible</li>
-            <li>3. Upload photo to auto-analyze</li>
-            <li>4. View detailed nutrition breakdown</li>
-          </ol>
+          <div className="space-y-3">
+            <div>
+              <h4 className="font-medium text-green-600 mb-1">📸 Image Analysis:</h4>
+              <ol className="text-sm text-gray-600 space-y-1 ml-4">
+                <li>1. Take a clear photo of your food</li>
+                <li>2. Make sure the food is well-lit and visible</li>
+                <li>3. Tap "Analyze Image" to get AI-powered nutrition data</li>
+                <li>4. View detailed nutrition breakdown for detected foods</li>
+              </ol>
+            </div>
+          </div>
+          
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <h4 className="font-semibold text-green-700 mb-2">💡 Tips for better results:</h4>
+            <ul className="text-xs text-gray-600 space-y-1">
+              <li>• Take photos in good lighting conditions</li>
+              <li>• Ensure food items are clearly visible</li>
+              <li>• Avoid cluttered backgrounds</li>
+              <li>• For text queries, be specific about preparation methods</li>
+            </ul>
+          </div>
         </div>
 
         {/* Test Image Guide Modal */}
