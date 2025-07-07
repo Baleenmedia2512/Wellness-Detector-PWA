@@ -272,7 +272,8 @@ class GeminiService {
         calories: Math.round(parseFloat(combinedNutrition.calories) || 0),
         protein: Math.round(parseFloat(combinedNutrition.protein) || 0),
         carbs: Math.round(parseFloat(combinedNutrition.carbs) || 0),
-        fat: Math.round(parseFloat(combinedNutrition.fat) || 0)
+        fat: Math.round(parseFloat(combinedNutrition.fat) || 0),
+        fiber: Math.round(parseFloat(combinedNutrition.fiber) || 0)
       },
       category: {
         name: totalItems > 1 ? `Mixed Foods (${totalItems} items)` : primaryFood.name
@@ -286,6 +287,7 @@ class GeminiService {
         protein: Math.round(parseFloat(food.nutrition.protein) || 0),
         carbs: Math.round(parseFloat(food.nutrition.carbs) || 0),
         fat: Math.round(parseFloat(food.nutrition.fat) || 0),
+        fiber: Math.round(parseFloat(food.nutrition.fiber) || 0),
         confidence: food.confidence
       })),
       servingInfo: primaryFood.serving_info ? {
@@ -309,7 +311,8 @@ class GeminiService {
         calories: Math.round(parseFloat(food.nutrition.calories) || 0),
         protein: Math.round(parseFloat(food.nutrition.protein) || 0),
         carbs: Math.round(parseFloat(food.nutrition.carbs) || 0),
-        fat: Math.round(parseFloat(food.nutrition.fat) || 0)
+        fat: Math.round(parseFloat(food.nutrition.fat) || 0),
+        fiber: Math.round(parseFloat(food.nutrition.fiber) || 0)
       },
       category: {
         name: food.name

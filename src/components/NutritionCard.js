@@ -26,7 +26,7 @@ const NutritionCard = ({ data }) => {
 
       {/* Nutrition Grid */}
       <div className="p-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">
           {/* Calories */}
           <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 text-center">
             <div className="text-2xl font-bold text-red-600">
@@ -66,9 +66,19 @@ const NutritionCard = ({ data }) => {
               Fat
             </div>
           </div>
+
+          {/* Fiber */}
+          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 text-center col-span-2 md:col-span-1">
+            <div className="text-2xl font-bold text-green-600">
+              {nutrition.fiber}g
+            </div>
+            <div className="text-sm font-medium text-green-700">
+              Fiber
+            </div>
+          </div>
         </div>
 
-        {/* Macronutrient Bar */}
+{/* Macronutrient Bar */}
         <div className="mt-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
             Macronutrient Distribution
@@ -101,10 +111,57 @@ const NutritionCard = ({ data }) => {
               );
             })()}
           </div>
-          <div className="flex justify-between text-xs text-gray-600 mt-1">
-            <span>🟡 Carbs</span>
-            <span>🔵 Protein</span>
-            <span>🟣 Fat</span>
+          
+          {/* Aligned Labels */}
+          <div className="relative mt-1">
+            {(() => {
+              const totalCals = (nutrition.carbs * 4) + (nutrition.protein * 4) + (nutrition.fat * 9);
+              const carbsPct = totalCals > 0 ? ((nutrition.carbs * 4) / totalCals) * 100 : 0;
+              const proteinPct = totalCals > 0 ? ((nutrition.protein * 4) / totalCals) * 100 : 0;
+              const fatPct = totalCals > 0 ? ((nutrition.fat * 9) / totalCals) * 100 : 0;
+
+              // Calculate center positions of each segment
+              const carbsCenter = carbsPct / 2;
+              const proteinCenter = carbsPct + (proteinPct / 2);
+              const fatCenter = carbsPct + proteinPct + (fatPct / 2);
+
+              return (
+                <div className="flex relative h-6 text-xs text-gray-600">
+                  {/* Carbs Label */}
+                  {carbsPct > 0 && (
+                    <div 
+                      className="absolute flex items-center justify-center transform -translate-x-1/2"
+                      style={{ left: `${carbsCenter}%` }}
+                    >
+                      <span className="w-2 h-2 bg-yellow-400 rounded-full mr-1"></span>
+                      <span className="whitespace-nowrap">Carbs</span>
+                    </div>
+                  )}
+                  
+                  {/* Protein Label */}
+                  {proteinPct > 0 && (
+                    <div 
+                      className="absolute flex items-center justify-center transform -translate-x-1/2"
+                      style={{ left: `${proteinCenter}%` }}
+                    >
+                      <span className="w-2 h-2 bg-blue-400 rounded-full mr-1"></span>
+                      <span className="whitespace-nowrap">Protein</span>
+                    </div>
+                  )}
+                  
+                  {/* Fat Label */}
+                  {fatPct > 0 && (
+                    <div 
+                      className="absolute flex items-center justify-center transform -translate-x-1/2"
+                      style={{ left: `${fatCenter}%` }}
+                    >
+                      <span className="w-2 h-2 bg-purple-400 rounded-full mr-1"></span>
+                      <span className="whitespace-nowrap">Fat</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -129,7 +186,7 @@ const NutritionCard = ({ data }) => {
               <div className="space-y-1">
                 {detailedItems.map((item, index) => (
                   <div key={index} className="text-xs text-gray-600 bg-gray-50 rounded p-2">
-                    <strong>{item.name}:</strong> {item.calories} cal, {item.protein}g protein, {item.carbs}g carbs, {item.fat}g fat
+                    <strong>{item.name}:</strong> {item.calories} cal, {item.protein}g protein, {item.carbs}g carbs, {item.fat}g fat, {item.fiber}g fiber
                   </div>
                 ))}
               </div>
@@ -148,9 +205,8 @@ const NutritionCard = ({ data }) => {
         <div className="mt-4 flex gap-2">
           <button 
             onClick={() => {
-              // You could add functionality to save or share this data
               navigator.clipboard?.writeText(
-                `${category.name}: ${nutrition.calories} calories, ${nutrition.carbs}g carbs, ${nutrition.protein}g protein, ${nutrition.fat}g fat`
+                `${category.name}: ${nutrition.calories} calories, ${nutrition.carbs}g carbs, ${nutrition.protein}g protein, ${nutrition.fat}g fat, ${nutrition.fiber}g fiber`
               );
             }}
             className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
@@ -159,10 +215,7 @@ const NutritionCard = ({ data }) => {
           </button>
           
           <button 
-            onClick={() => {
-              // Reset to search for another food
-              window.location.reload();
-            }}
+            onClick={() => window.location.reload()}
             className="flex-1 bg-green-100 text-green-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
           >
             🔍 Search Again
