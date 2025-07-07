@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/Wellness-Detector-PWA/static/css/main.7a26a349.css",
-    "main.js": "/Wellness-Detector-PWA/static/js/main.bb039dd1.js",
+    "main.js": "/Wellness-Detector-PWA/static/js/main.f34a8876.js",
     "index.html": "/Wellness-Detector-PWA/index.html",
     "main.7a26a349.css.map": "/Wellness-Detector-PWA/static/css/main.7a26a349.css.map",
-    "main.bb039dd1.js.map": "/Wellness-Detector-PWA/static/js/main.bb039dd1.js.map"
+    "main.f34a8876.js.map": "/Wellness-Detector-PWA/static/js/main.f34a8876.js.map"
   },
   "entrypoints": [
     "static/css/main.7a26a349.css",
-    "static/js/main.bb039dd1.js"
+    "static/js/main.f34a8876.js"
   ]
 }
