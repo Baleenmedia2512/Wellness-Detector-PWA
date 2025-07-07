@@ -34,7 +34,7 @@ const Header = ({ user, onTestCamera, onSignOut }) => {
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 w-56 -translate-y-3 bg-white rounded-xl shadow-xl ring-1 ring-black/5 z-50">
+            <div className="absolute right-0 w-56 bg-white rounded-xl shadow-xl ring-1 ring-black/5 z-50">
               <div className="py-2">
                 <button
                   onClick={() => {
