@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ImageUpload from './components/ImageUpload';
 import NutritionCard from './components/NutritionCard';
-import LoadingSpinner from './components/LoadingSpinner';
 import TestImageGuide from './components/TestImageGuide';
 import CameraTest from './components/CameraTest';
 import { geminiService } from './services/geminiService';
@@ -99,7 +98,7 @@ function App() {
           <div className="flex justify-between items-start">
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-green-700 text-center">
-                🌿 Wellness Detector
+                🌿 Wellness Buddy
               </h1>
               <p className="text-green-600 text-center mt-2 text-sm">
                 Get nutrition data for any food
@@ -119,45 +118,13 @@ function App() {
       {/* Main Content */}
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
         
-        {/* Camera Status Info */}
-        {cameraInfo && (
-          <div className={`rounded-lg p-3 text-sm ${
-            cameraInfo.supportsCapture 
-              ? 'bg-green-50 border border-green-200 text-green-700'
-              : cameraInfo.hasCamera 
-                ? 'bg-blue-50 border border-blue-200 text-blue-700'
-                : 'bg-gray-50 border border-gray-200 text-gray-700'
-          }`}>
-            <div className="flex items-center gap-2">
-              {cameraInfo.supportsCapture ? '📱' : cameraInfo.hasCamera ? '📷' : '🖼️'}
-              <span className="font-medium">
-                {cameraInfo.isPWA ? 'PWA Mode' : 'Browser Mode'} • 
-                {cameraInfo.isMobile ? ' Mobile Device' : ' Desktop'}
-              </span>
-            </div>
-            <p className="mt-1">{cameraStatusMessage}</p>
-          </div>
-        )}
-
-        {/* Image Upload Section */}
+        {/* Image Upload Section with Loading Overlay */}
         <ImageUpload
           onImageSelect={handleImageSelect}
           imagePreview={imagePreview}
+          loading={loading}
           ref={fileInputRef}
         />
-
-        {/* Action Buttons */}
-        {/* <div className="flex gap-3">
-          <button
-            onClick={resetApp}
-            className="flex-1 bg-gray-500 text-white py-3 px-4 rounded-xl font-semibold shadow-lg hover:bg-gray-600 transition-all duration-200"
-          >
-            🔄
-          </button>
-        </div> */}
-
-        {/* Loading Spinner */}
-        {loading && <LoadingSpinner />}
 
         {/* Error Message */}
         {error && (
@@ -187,20 +154,6 @@ function App() {
             </div>
           </div>
         )}
-
-        {/* Gemini AI Notice */}
-        <div className="bg-gradient-to-r from-blue-100 to-green-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-xl">
-          <div className="text-sm">
-            <strong>🍽️ Powered by Google Gemini AI:</strong> This app uses Google's advanced Gemini AI for intelligent food image analysis.
-            <br />
-            <span className="text-blue-600">
-              • Advanced computer vision for food recognition<br />
-              • AI-powered nutrition calculation<br />
-              • Support for multiple foods in one image<br />
-              • {apiInfo.dailyLimit.toLocaleString()} free requests per day
-            </span>
-          </div>
-        </div>
 
         {/* Instructions */}
         <div className="bg-white rounded-xl shadow-lg border border-green-200 p-4">

@@ -1,8 +1,8 @@
 {
-  "name": "wellness-detector-pwa",
+  "name": "wellness-buddy-pwa",
   "version": "1.0.0",
   "description": "A mobile-friendly PWA for food nutrition analysis",
-  "homepage": "https://Baleenmedia2512.github.io/Wellness-Detector-PWA",
+  "homepage": "https://Baleenmedia2512.github.io/Wellness-Buddy-PWA",
   "private": true,
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
