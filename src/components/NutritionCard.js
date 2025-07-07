@@ -167,18 +167,6 @@ const NutritionCard = ({ data }) => {
 
         {/* Additional Info */}
         <div className="mt-6 pt-4 border-t border-gray-200">
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span className="flex items-center">
-              <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-              Data from {source}
-            </span>
-            {data.isRealData && (
-              <span className="text-green-600 font-medium">
-                ✓ Verified Data
-              </span>
-            )}
-          </div>
-
           {/* Detailed Items */}
           {detailedItems && detailedItems.length > 1 && (
             <div className="mt-3">
