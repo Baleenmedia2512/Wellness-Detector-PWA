@@ -3,8 +3,13 @@ import ImageUpload from './components/ImageUpload';
 import NutritionCard from './components/NutritionCard';
 import TestImageGuide from './components/TestImageGuide';
 import CameraTest from './components/CameraTest';
+import LoadingSpinner from './components/LoadingSpinner';
+import Login from './components/Login';
 import { geminiService } from './services/geminiService';
 import { cameraService } from './services/cameraService';
+import { auth, signInWithGoogle, signOutUser } from './services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import Header from './components/Header';
 
 function App() {
   const [selectedImage, setSelectedImage] = useState(null);
@@ -17,25 +22,41 @@ function App() {
   const [cameraInfo, setCameraInfo] = useState(null);
   const [cameraStatusMessage, setCameraStatusMessage] = useState('');
   const [showCameraTest, setShowCameraTest] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    const checkCamera = async () => {
-      try {
-        const info = await cameraService.getCameraInfo();
-        const message = await cameraService.getCameraStatusMessage();
-        setCameraInfo(info);
-        setCameraStatusMessage(message);
-      } catch (error) {
-        console.warn('Failed to check camera:', error);
-        setCameraStatusMessage('Camera status unknown. You can still upload photos from gallery.');
-      }
-    };
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setAuthLoading(false);
+    });
 
-    checkCamera();
+    return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      const checkCamera = async () => {
+        try {
+          const info = await cameraService.getCameraInfo();
+          const message = await cameraService.getCameraStatusMessage();
+          setCameraInfo(info);
+          setCameraStatusMessage(message);
+        } catch (error) {
+          console.warn('Failed to check camera:', error);
+          setCameraStatusMessage('Camera status unknown. You can still upload photos from gallery.');
+        }
+      };
+      checkCamera();
+    }
+  }, [user]);
+
   const handleImageSelect = (file) => {
+    if (!user) {
+      setError('Please sign in to analyze food images');
+      return;
+    }
     setSelectedImage(file);
     setError(null);
     setNutritionData(null);
@@ -48,6 +69,11 @@ function App() {
   };
 
   const analyzeFood = async () => {
+    if (!user) {
+      setError('Please sign in to analyze food images');
+      return;
+    }
+
     if (!selectedImage) {
       setError('Please upload an image to analyze');
       return;
@@ -75,10 +101,10 @@ function App() {
   };
 
   useEffect(() => {
-    if (selectedImage) {
+    if (selectedImage && user) {
       analyzeFood();
     }
-  }, [selectedImage]);
+  }, [selectedImage, user]);
 
   const resetApp = () => {
     setSelectedImage(null);
@@ -90,35 +116,49 @@ function App() {
     }
   };
 
+  const handleSignIn = async () => {
+    try {
+      setLoading(true);
+      await signInWithGoogle();
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      setLoading(true);
+      await signOutUser();
+      resetApp();
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (authLoading) {
+    return <LoadingSpinner context="login" />;
+  }
+
+  if (!user) {
+    return <Login onSignIn={handleSignIn} loading={loading} />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
       {/* Header */}
-      <div className="bg-white shadow-lg border-b-4 border-green-500">
-        <div className="max-w-md mx-auto px-4 py-6">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold text-green-700 text-center">
-                🌿 Wellness Buddy
-              </h1>
-              <p className="text-green-600 text-center mt-2 text-sm">
-                Get nutrition data for any food
-              </p>
-            </div>
-            <button
-              onClick={() => setShowCameraTest(true)}
-              className="bg-blue-100 text-blue-700 px-3 py-2 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors ml-2"
-              title="Test camera functionality"
-            >
-              📷 Test
-            </button>
-          </div>
-        </div>
-      </div>
+      <Header
+        user={user}
+        onTestCamera={() => setShowCameraTest(true)}
+        onSignOut={handleSignOut}
+      />
+
 
       {/* Main Content */}
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
-        
-        {/* Image Upload Section with Loading Overlay */}
         <ImageUpload
           onImageSelect={handleImageSelect}
           imagePreview={imagePreview}
@@ -126,7 +166,6 @@ function App() {
           ref={fileInputRef}
         />
 
-        {/* Error Message */}
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl">
             <div className="flex items-center">
@@ -136,26 +175,8 @@ function App() {
           </div>
         )}
 
-        {/* Nutrition Results */}
         {nutritionData && <NutritionCard data={nutritionData} />}
 
-        {/* API Status */}
-        {!apiInfo.hasCredentials && (
-          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded-xl">
-            <div className="flex items-center">
-              <span className="text-lg mr-2">⚠️</span>
-              <div>
-                <strong>Gemini API Required:</strong> Please add your Gemini API key to use AI nutrition analysis.
-                <br />
-                <span className="text-sm">
-                  Get free API key at: <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline">makersuite.google.com</a>
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Instructions */}
         <div className="bg-white rounded-xl shadow-lg border border-green-200 p-4">
           <h3 className="font-semibold text-green-700 mb-2">📋 How to use:</h3>
           <div className="space-y-3">
@@ -181,13 +202,11 @@ function App() {
           </div>
         </div>
 
-        {/* Test Image Guide Modal */}
         <TestImageGuide 
           isVisible={showTestGuide} 
           onClose={() => setShowTestGuide(false)} 
         />
 
-        {/* Camera Test Modal */}
         {showCameraTest && (
           <CameraTest onClose={() => setShowCameraTest(false)} />
         )}
