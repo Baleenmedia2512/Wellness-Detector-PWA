@@ -8,13 +8,7 @@ const originalXMLHttpRequest = window.XMLHttpRequest;
 window.fetch = function(...args) {
   const url = args[0];
   const options = args[1] || {};
-  
-  console.log('🌐 FETCH REQUEST:', {
-    url: url,
-    method: options.method || 'GET',
-    headers: options.headers,
-    timestamp: new Date().toISOString()
-  });
+
   
   // Check for unwanted API calls
   if (typeof url === 'string') {
@@ -65,7 +59,7 @@ window.XMLHttpRequest = function() {
 
 class GeminiService {
   constructor() {
-    this.apiKey = process.env.REACT_APP_GEMINI_API_KEY;
+    this.apiKey = process.env.GEMINI_API_KEY;
     this.genAI = null;
     this.model = null;
     

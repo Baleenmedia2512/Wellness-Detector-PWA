@@ -27,7 +27,7 @@ npm install
 ### 3. Configure Environment Variables
 1. Edit `.env` and add your API key:
    ```
-   REACT_APP_GEMINI_API_KEY=your_actual_api_key_here
+   GEMINI_API_KEY=your_actual_api_key_here
    ```
 
 ### 4. Run the App

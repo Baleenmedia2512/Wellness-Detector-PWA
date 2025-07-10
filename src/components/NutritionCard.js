@@ -1,3 +1,4 @@
+//src\components\NutritionCard.js
 import React from 'react';
 
 const NutritionCard = ({ data }) => {

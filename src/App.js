@@ -1,3 +1,4 @@
+// src/App.js
 import React, { useState, useRef, useEffect } from 'react';
 import ImageUpload from './components/ImageUpload';
 import NutritionCard from './components/NutritionCard';
@@ -12,6 +13,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import Header from './components/Header';
 
 function App() {
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [nutritionData, setNutritionData] = useState(null);
@@ -24,6 +26,9 @@ function App() {
   const [showCameraTest, setShowCameraTest] = useState(false);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isOtpVerified, setIsOtpVerified] = useState(
+    localStorage.getItem('isOtpVerified') === 'true'
+  );
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -52,6 +57,16 @@ function App() {
     }
   }, [user]);
 
+  useEffect(() => {
+  if (isOtpVerified && !user) {
+    const otpUser = localStorage.getItem('otpUser');
+    if (otpUser) {
+      setUser(JSON.parse(otpUser));
+    }
+  }
+}, [isOtpVerified, user]);
+
+
   const handleImageSelect = (file) => {
     if (!user) {
       setError('Please sign in to analyze food images');
@@ -70,17 +85,19 @@ function App() {
 
   const analyzeFood = async () => {
     if (!user) {
-      setError('Please sign in to analyze food images');
+      setError('🚫 Please sign in to analyze food images.');
       return;
     }
 
     if (!selectedImage) {
-      setError('Please upload an image to analyze');
+      setError('📸 Please upload an image to analyze.');
       return;
     }
 
     if (!apiInfo.hasCredentials) {
-      setError('Gemini API key is not configured. Please add REACT_APP_GEMINI_API_KEY to your environment variables. Get a free API key at: https://makersuite.google.com/app/apikey');
+      setError(
+        '⚙️ Gemini API key is missing. Please add your API key to the environment variables. Visit: https://makersuite.google.com/app/apikey'
+      );
       return;
     }
 
@@ -88,12 +105,25 @@ function App() {
     setError(null);
 
     try {
-      console.log(`🍽️ Analyzing food with Gemini AI...`);
       const result = await geminiService.analyzeImageForNutrition(selectedImage);
       setNutritionData(result);
-      console.log('✅ Food analysis completed:', result);
     } catch (err) {
-      setError(err.message || 'Food analysis failed. Please try again.');
+      let friendlyMessage = '❌ Food analysis failed. Please try again later.';
+      const rawMessage = err.message || '';
+
+      if (rawMessage.includes('503') || rawMessage.includes('overloaded')) {
+        friendlyMessage = '⚡ Gemini AI is currently busy. Please try again in a few minutes.';
+      } else if (rawMessage.includes('No food items detected')) {
+        friendlyMessage = '⚠️ No food items were detected in the image. Try with a clearer photo.';
+      } else if (rawMessage.includes('Invalid response format')) {
+        friendlyMessage = '⚙️ Received unexpected data from Gemini API. Please try again later.';
+      } else if (rawMessage.includes('network') || rawMessage.includes('Failed to fetch')) {
+        friendlyMessage = '🌐 Network issue. Please check your internet connection.';
+      } else if (rawMessage.includes('API key is not configured')) {
+        friendlyMessage = '⚙️ Gemini API key is missing or invalid. Please check your setup.';
+      }
+
+      setError(friendlyMessage);
       console.error('❌ Gemini analysis error:', err);
     } finally {
       setLoading(false);
@@ -111,27 +141,43 @@ function App() {
     setImagePreview(null);
     setNutritionData(null);
     setError(null);
+    setUser(null);
+    setIsOtpVerified(false);
+    localStorage.removeItem('isOtpVerified');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
   const handleSignIn = async () => {
-    try {
-      setLoading(true);
-      await signInWithGoogle();
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    setLoading(true);
+    const user = await signInWithGoogle();
+
+    // Save user in DB
+    await fetch(`${apiBaseUrl}/api/save-google-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: user.email,
+        displayName: user.displayName || user.email.split('@')[0]
+      })
+    });
+  } catch (error) {
+    setError(error.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleSignOut = async () => {
     try {
       setLoading(true);
       await signOutUser();
       resetApp();
+      setIsOtpVerified(false);
+      localStorage.removeItem('isOtpVerified');
     } catch (error) {
       setError(error.message);
     } finally {
@@ -140,24 +186,49 @@ function App() {
   };
 
   if (authLoading) {
-    return <LoadingSpinner context="login" />;
+    return <LoadingSpinner context="normal" />;
   }
 
-  if (!user) {
-    return <Login onSignIn={handleSignIn} loading={loading} />;
-  }
+// 1. If no Firebase user & OTP not yet verified → Show Login
+if (!user && !isOtpVerified) {
+  return (
+    <Login
+      onSignIn={handleSignIn}
+      loading={loading}
+      onOtpVerified={() => {
+        setIsOtpVerified(true);
+        localStorage.setItem('isOtpVerified', 'true');
+      }}
+    />
+  );
+}
+
+// 2. Safely check for Google User (only if user exists)
+const isGoogleUser = user?.providerData?.[0]?.providerId === 'google.com';
+
+// 3. If user is NOT Google & OTP not yet verified → Force OTP Login
+if (!isOtpVerified && !isGoogleUser) {
+  return (
+    <Login
+      onSignIn={handleSignIn}
+      loading={loading}
+      onOtpVerified={() => {
+        setIsOtpVerified(true);
+        localStorage.setItem('isOtpVerified', 'true');
+      }}
+      forceOtpVerification={true}
+    />
+  );
+}
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
-      {/* Header */}
       <Header
         user={user}
         onTestCamera={() => setShowCameraTest(true)}
         onSignOut={handleSignOut}
       />
-
-
-      {/* Main Content */}
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
         <ImageUpload
           onImageSelect={handleImageSelect}
@@ -167,10 +238,11 @@ function App() {
         />
 
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl">
-            <div className="flex items-center">
-              <span className="text-lg mr-2">⚠️</span>
-              <span className="font-medium">{error}</span>
+          <div className="bg-white border border-red-200 text-red-600 px-4 py-3 rounded-xl shadow-sm flex items-start space-x-3">
+            <div className="text-xl">⚠️</div>
+            <div className="flex-1">
+              <p className="font-semibold">Error</p>
+              <p className="text-sm leading-relaxed">{error}</p>
             </div>
           </div>
         )}
@@ -190,7 +262,7 @@ function App() {
               </ol>
             </div>
           </div>
-          
+
           <div className="mt-3 pt-3 border-t border-gray-200">
             <h4 className="font-semibold text-green-700 mb-2">💡 Tips for better results:</h4>
             <ul className="text-xs text-gray-600 space-y-1">
@@ -202,9 +274,9 @@ function App() {
           </div>
         </div>
 
-        <TestImageGuide 
-          isVisible={showTestGuide} 
-          onClose={() => setShowTestGuide(false)} 
+        <TestImageGuide
+          isVisible={showTestGuide}
+          onClose={() => setShowTestGuide(false)}
         />
 
         {showCameraTest && (
