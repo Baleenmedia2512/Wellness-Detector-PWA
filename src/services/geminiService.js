@@ -7,7 +7,7 @@ const originalXMLHttpRequest = window.XMLHttpRequest;
 // Override fetch
 window.fetch = function(...args) {
   const url = args[0];
-  const options = args[1] || {};
+  // const options = args[1] || {};
 
   
   // Check for unwanted API calls

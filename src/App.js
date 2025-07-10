@@ -19,10 +19,10 @@ function App() {
   const [nutritionData, setNutritionData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [apiInfo, setApiInfo] = useState(geminiService.getApiInfo());
+  // const [apiInfo, _setApiInfo] = useState(geminiService.getApiInfo());
   const [showTestGuide, setShowTestGuide] = useState(false);
-  const [cameraInfo, setCameraInfo] = useState(null);
-  const [cameraStatusMessage, setCameraStatusMessage] = useState('');
+  // const [_cameraInfo, setCameraInfo] = useState(null);
+  // const [_cameraStatusMessage, setCameraStatusMessage] = useState('');
   const [showCameraTest, setShowCameraTest] = useState(false);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -46,11 +46,12 @@ function App() {
         try {
           const info = await cameraService.getCameraInfo();
           const message = await cameraService.getCameraStatusMessage();
-          setCameraInfo(info);
-          setCameraStatusMessage(message);
+          console.log(info, message)
+          // setCameraInfo(info);
+          // setCameraStatusMessage(message);
         } catch (error) {
           console.warn('Failed to check camera:', error);
-          setCameraStatusMessage('Camera status unknown. You can still upload photos from gallery.');
+          // setCameraStatusMessage('Camera status unknown. You can still upload photos from gallery.');
         }
       };
       checkCamera();
@@ -72,69 +73,99 @@ function App() {
       setError('Please sign in to analyze food images');
       return;
     }
+
     setSelectedImage(file);
     setError(null);
     setNutritionData(null);
+    console.log(selectedImage)
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       setImagePreview(e.target.result);
+
+      // ✅ Analyze food after preview is ready
+      try {
+        setLoading(true);
+        const result = await geminiService.analyzeImageForNutrition(file);
+        setNutritionData(result);
+      } catch (err) {
+        let friendlyMessage = '❌ Food analysis failed. Please try again later.';
+        const rawMessage = err.message || '';
+
+        if (rawMessage.includes('503') || rawMessage.includes('overloaded')) {
+          friendlyMessage = '⚡ Gemini AI is currently busy. Please try again in a few minutes.';
+        } else if (rawMessage.includes('No food items detected')) {
+          friendlyMessage = '⚠️ No food items were detected in the image. Try with a clearer photo.';
+        } else if (rawMessage.includes('Invalid response format')) {
+          friendlyMessage = '⚙️ Received unexpected data from Gemini API. Please try again later.';
+        } else if (rawMessage.includes('network') || rawMessage.includes('Failed to fetch')) {
+          friendlyMessage = '🌐 Network issue. Please check your internet connection.';
+        } else if (rawMessage.includes('API key is not configured')) {
+          friendlyMessage = '⚙️ Gemini API key is missing or invalid. Please check your setup.';
+        }
+
+        setError(friendlyMessage);
+        console.error('❌ Gemini analysis error:', err);
+      } finally {
+        setLoading(false);
+      }
     };
+
     reader.readAsDataURL(file);
   };
 
-  const analyzeFood = async () => {
-    if (!user) {
-      setError('🚫 Please sign in to analyze food images.');
-      return;
-    }
+  // const analyzeFood = async () => {
+  //   if (!user) {
+  //     setError('🚫 Please sign in to analyze food images.');
+  //     return;
+  //   }
 
-    if (!selectedImage) {
-      setError('📸 Please upload an image to analyze.');
-      return;
-    }
+  //   if (!selectedImage) {
+  //     setError('📸 Please upload an image to analyze.');
+  //     return;
+  //   }
 
-    if (!apiInfo.hasCredentials) {
-      setError(
-        '⚙️ Gemini API key is missing. Please add your API key to the environment variables. Visit: https://makersuite.google.com/app/apikey'
-      );
-      return;
-    }
+  //   // if (!apiInfo.hasCredentials) {
+  //   //   setError(
+  //   //     '⚙️ Gemini API key is missing. Please add your API key to the environment variables. Visit: https://makersuite.google.com/app/apikey'
+  //   //   );
+  //   //   return;
+  //   // }
 
-    setLoading(true);
-    setError(null);
+  //   setLoading(true);
+  //   setError(null);
 
-    try {
-      const result = await geminiService.analyzeImageForNutrition(selectedImage);
-      setNutritionData(result);
-    } catch (err) {
-      let friendlyMessage = '❌ Food analysis failed. Please try again later.';
-      const rawMessage = err.message || '';
+  //   try {
+  //     const result = await geminiService.analyzeImageForNutrition(selectedImage);
+  //     setNutritionData(result);
+  //   } catch (err) {
+  //     let friendlyMessage = '❌ Food analysis failed. Please try again later.';
+  //     const rawMessage = err.message || '';
 
-      if (rawMessage.includes('503') || rawMessage.includes('overloaded')) {
-        friendlyMessage = '⚡ Gemini AI is currently busy. Please try again in a few minutes.';
-      } else if (rawMessage.includes('No food items detected')) {
-        friendlyMessage = '⚠️ No food items were detected in the image. Try with a clearer photo.';
-      } else if (rawMessage.includes('Invalid response format')) {
-        friendlyMessage = '⚙️ Received unexpected data from Gemini API. Please try again later.';
-      } else if (rawMessage.includes('network') || rawMessage.includes('Failed to fetch')) {
-        friendlyMessage = '🌐 Network issue. Please check your internet connection.';
-      } else if (rawMessage.includes('API key is not configured')) {
-        friendlyMessage = '⚙️ Gemini API key is missing or invalid. Please check your setup.';
-      }
+  //     if (rawMessage.includes('503') || rawMessage.includes('overloaded')) {
+  //       friendlyMessage = '⚡ Gemini AI is currently busy. Please try again in a few minutes.';
+  //     } else if (rawMessage.includes('No food items detected')) {
+  //       friendlyMessage = '⚠️ No food items were detected in the image. Try with a clearer photo.';
+  //     } else if (rawMessage.includes('Invalid response format')) {
+  //       friendlyMessage = '⚙️ Received unexpected data from Gemini API. Please try again later.';
+  //     } else if (rawMessage.includes('network') || rawMessage.includes('Failed to fetch')) {
+  //       friendlyMessage = '🌐 Network issue. Please check your internet connection.';
+  //     } else if (rawMessage.includes('API key is not configured')) {
+  //       friendlyMessage = '⚙️ Gemini API key is missing or invalid. Please check your setup.';
+  //     }
 
-      setError(friendlyMessage);
-      console.error('❌ Gemini analysis error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     setError(friendlyMessage);
+  //     console.error('❌ Gemini analysis error:', err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
-  useEffect(() => {
-    if (selectedImage && user) {
-      analyzeFood();
-    }
-  }, [selectedImage, user]);
+  // useEffect(() => {
+  //   if (selectedImage && user) {
+  //     analyzeFood();
+  //   }
+  // }, [selectedImage, user]);
 
   const resetApp = () => {
     setSelectedImage(null);
