@@ -14,7 +14,6 @@ import Header from './components/Header';
 
 function App() {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-  console.log(apiBaseUrl)
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [nutritionData, setNutritionData] = useState(null);
