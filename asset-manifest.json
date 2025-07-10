@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/Wellness-Buddy-PWA/static/css/main.4c7da022.css",
-    "main.js": "/Wellness-Buddy-PWA/static/js/main.173b2e89.js",
+    "main.js": "/Wellness-Buddy-PWA/static/js/main.b01bfb47.js",
     "index.html": "/Wellness-Buddy-PWA/index.html",
     "main.4c7da022.css.map": "/Wellness-Buddy-PWA/static/css/main.4c7da022.css.map",
-    "main.173b2e89.js.map": "/Wellness-Buddy-PWA/static/js/main.173b2e89.js.map"
+    "main.b01bfb47.js.map": "/Wellness-Buddy-PWA/static/js/main.b01bfb47.js.map"
   },
   "entrypoints": [
     "static/css/main.4c7da022.css",
-    "static/js/main.173b2e89.js"
+    "static/js/main.b01bfb47.js"
   ]
 }
