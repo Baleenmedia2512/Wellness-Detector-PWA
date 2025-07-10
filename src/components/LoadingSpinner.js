@@ -19,7 +19,7 @@ const LoadingSpinner = ({ context = 'analysis' }) => {
     }
   };
 
-  const { title, subtitle, color } = loadingMessages[context] || loadingMessages.normal;
+  const { title, subtitle } = loadingMessages[context] || loadingMessages.normal;
 
   const wellnessTaglines = [
     "Snap, Analyze, Nourish - Your health journey starts here",

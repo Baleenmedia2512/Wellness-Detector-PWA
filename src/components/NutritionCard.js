@@ -4,7 +4,7 @@ import React from 'react';
 const NutritionCard = ({ data }) => {
   if (!data) return null;
 
-  const { nutrition, category, source, servingInfo, itemCount, detailedItems } = data;
+  const { nutrition, category, servingInfo, itemCount, detailedItems } = data;
 
   return (
     <div className="bg-white rounded-xl shadow-lg border-2 border-green-300 overflow-hidden">

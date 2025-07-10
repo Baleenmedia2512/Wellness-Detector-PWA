@@ -32,10 +32,10 @@ const ImageUpload = forwardRef(({ onImageSelect, imagePreview, loading = false }
     galleryInputRef.current?.click();
   };
 
-  const triggerFileInput = () => {
-    // Default behavior for backward compatibility
-    cameraInputRef.current?.click();
-  };
+  // const triggerFileInput = () => {
+  //   // Default behavior for backward compatibility
+  //   cameraInputRef.current?.click();
+  // };
 
   return (
     <div className="bg-white rounded-xl shadow-lg border-2 border-green-200 p-6">
