@@ -59,7 +59,7 @@ window.XMLHttpRequest = function() {
 
 class GeminiService {
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY;
+    this.apiKey = process.env.REACT_APP_GEMINI_API_KEY;
     this.genAI = null;
     this.model = null;
     
