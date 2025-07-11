@@ -288,8 +288,7 @@ if (!isOtpVerified && !isGoogleUser) {
               <ol className="text-sm text-gray-600 space-y-1 ml-4">
                 <li>1. Take a clear photo of your food</li>
                 <li>2. Make sure the food is well-lit and visible</li>
-                <li>3. Tap "Analyze Image" to get AI-powered nutrition data</li>
-                <li>4. View detailed nutrition breakdown for detected foods</li>
+                <li>3. View detailed nutrition breakdown for detected foods</li>
               </ol>
             </div>
           </div>

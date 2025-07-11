@@ -7,8 +7,6 @@ const originalXMLHttpRequest = window.XMLHttpRequest;
 // Override fetch
 window.fetch = function(...args) {
   const url = args[0];
-  // const options = args[1] || {};
-
   
   // Check for unwanted API calls
   if (typeof url === 'string') {
@@ -63,9 +61,21 @@ class GeminiService {
     this.genAI = null;
     this.model = null;
     
+    // Add timeout and retry configuration
+    this.timeout = 30000; // 30 second timeout
+    this.maxRetries = 2;
+    
     if (this.apiKey) {
       this.genAI = new GoogleGenerativeAI(this.apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      this.model = this.genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        generationConfig: {
+          temperature: 0.1, // Lower temperature for more consistent responses
+          topK: 1,
+          topP: 0.8,
+          maxOutputTokens: 2048, // Limit output to speed up response
+        }
+      });
     }
   }
 
@@ -73,154 +83,234 @@ class GeminiService {
     return {
       hasCredentials: !!this.apiKey,
       provider: 'Google Gemini',
-      dailyLimit: 1500, // Gemini free tier daily limit
-      description: 'Google Gemini AI for food image analysis'
+      dailyLimit: 1500,
+      description: 'Google Gemini AI for food image analysis (Optimized)'
     };
   }
 
+  // Optimized image preprocessing
+  async preprocessImage(imageFile) {
+    const maxSize = 1024 * 1024; // 1MB max
+    const maxDimension = 1024; // Max width/height
+    
+    // If image is already small enough, return as-is
+    if (imageFile.size <= maxSize) {
+      return imageFile;
+    }
+
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        // Calculate new dimensions
+        let { width, height } = img;
+        const ratio = Math.min(maxDimension / width, maxDimension / height);
+        
+        if (ratio < 1) {
+          width *= ratio;
+          height *= ratio;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Draw and compress
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(new File([blob], imageFile.name, { type: 'image/jpeg' }));
+          } else {
+            reject(new Error('Failed to compress image'));
+          }
+        }, 'image/jpeg', 0.8); // 80% quality
+      };
+      
+      img.onerror = reject;
+      img.src = URL.createObjectURL(imageFile);
+    });
+  }
+
   async analyzeImageForNutrition(imageFile) {
-    console.log('🔍 GeminiService: Starting image analysis...');
-    console.log('📸 Image file:', imageFile.name, imageFile.type, imageFile.size);
+    const startTime = Date.now();
+    console.log('🔍 GeminiService: Starting optimized image analysis...');
+    console.log('📸 Original image:', imageFile.name, imageFile.type, imageFile.size);
     
     if (!this.model) {
       throw new Error('Gemini API key is not configured');
     }
 
     try {
-      // Convert image to base64
-      const imageBase64 = await this.fileToBase64(imageFile);
+      // Preprocess image for faster processing
+      const processedImage = await this.preprocessImage(imageFile);
+      console.log('📸 Processed image size:', processedImage.size);
+      
+      // Convert to base64 with timeout
+      const imageBase64 = await Promise.race([
+        this.fileToBase64(processedImage),
+        this.timeoutPromise(10000, 'Image processing timeout')
+      ]);
+      
       console.log('📋 Image converted to base64, length:', imageBase64.length);
       
-      // Create the prompt for nutrition analysis
-      const prompt = `
-        Analyze this food image and provide detailed nutrition information. Please return a JSON response with the following structure:
+      // Simplified, more focused prompt for faster processing
+      const prompt = `Analyze this food image and return nutrition data in JSON format. Be quick but accurate.
 
-        {
-          "foods": [
-            {
-              "name": "detected food name",
-              "confidence": "confidence level (high/medium/low)",
-              "nutrition": {
-                "calories": "number per 100g",
-                "protein": "grams per 100g", 
-                "carbs": "grams per 100g",
-                "fat": "grams per 100g",
-                "fiber": "grams per 100g",
-                "sugar": "grams per 100g",
-                "sodium": "mg per 100g"
-              },
-              "serving_info": {
-                "typical_serving": "typical serving description",
-                "weight_per_serving": "grams",
-                "calories_per_serving": "calories"
-              }
-            }
-          ],
-          "analysis": {
-            "total_items": "number of food items detected",
-            "image_quality": "good/fair/poor",
-            "notes": "any additional observations"
-          }
-        }
+RULES:
+1. Estimate portions based on visual cues (plate size, typical servings)
+2. Use standard nutrition values
+3. Return concise JSON only
 
-        Rules:
-        1. Identify all visible foods in the image
-        2. Provide realistic nutrition values based on typical food composition
-        3. If multiple foods are visible, analyze each separately
-        4. Use standard nutrition database values
-        5. Be conservative with portion estimates
-        6. Return valid JSON only, no markdown formatting
-        7. If you cannot clearly identify food, indicate low confidence
-      `;
+FORMAT:
+{
+  "foods": [
+    {
+      "name": "food name",
+      "portion": "description like '2 idlis' or '1 cup rice'",
+      "weight_g": number,
+      "nutrition": {
+        "calories": number,
+        "protein": number,
+        "carbs": number,
+        "fat": number,
+        "fiber": number
+      }
+    }
+  ],
+  "total": {
+    "calories": number,
+    "protein": number,
+    "carbs": number,
+    "fat": number,
+    "fiber": number
+  },
+  "confidence": "high/medium/low"
+}
+
+Return valid JSON only, no markdown.`;
 
       const imagePart = {
         inlineData: {
           data: imageBase64,
-          mimeType: imageFile.type
+          mimeType: processedImage.type
         }
       };
 
-      const result = await this.model.generateContent([prompt, imagePart]);
+      // Make API call with timeout and retry logic
+      const result = await this.makeApiCallWithRetry(
+        () => this.model.generateContent([prompt, imagePart]),
+        this.maxRetries
+      );
+
       const response = await result.response;
       const text = response.text();
 
-      // Parse the JSON response
-      let nutritionData;
-      try {
-        // Clean the response text - remove any markdown formatting
-        const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
-        nutritionData = JSON.parse(cleanText);
-      } catch (parseError) {
-        console.error('Failed to parse Gemini response:', text);
-        throw new Error('Invalid response format from Gemini API');
-      }
-
-      // Transform the response to match our app's expected format
-      return this.transformGeminiResponse(nutritionData);
+      // Parse response
+      const nutritionData = this.parseJsonResponse(text);
+      const processingTime = Date.now() - startTime;
+      
+      console.log(`✅ Analysis completed in ${processingTime}ms`);
+      
+      return this.transformOptimizedResponse(nutritionData, 'image');
 
     } catch (error) {
-      console.error('Gemini API error:', error);
-      throw new Error(`Failed to analyze image: ${error.message}`);
+      const processingTime = Date.now() - startTime;
+      console.error(`❌ Analysis failed after ${processingTime}ms:`, error);
+      throw new Error(`Analysis failed: ${error.message}`);
     }
   }
 
   async analyzeTextForNutrition(foodText) {
+    const startTime = Date.now();
+    console.log('🔍 GeminiService: Starting text analysis for:', foodText);
+    
     if (!this.model) {
       throw new Error('Gemini API key is not configured');
     }
 
     try {
-      const prompt = `
-        Analyze the food "${foodText}" and provide detailed nutrition information. Please return a JSON response with the following structure:
+      // Simplified prompt for faster processing
+      const prompt = `Provide nutrition data for "${foodText}" in standard serving size. Return JSON only.
 
-        {
-          "food": {
-            "name": "${foodText}",
-            "nutrition": {
-              "calories": "number per 100g",
-              "protein": "grams per 100g", 
-              "carbs": "grams per 100g",
-              "fat": "grams per 100g",
-              "fiber": "grams per 100g",
-              "sugar": "grams per 100g",
-              "sodium": "mg per 100g"
-            },
-            "serving_info": {
-              "typical_serving": "typical serving description",
-              "weight_per_serving": "grams",
-              "calories_per_serving": "calories"
-            }
-          }
-        }
+FORMAT:
+{
+  "name": "${foodText}",
+  "serving": "description like '1 cup cooked'",
+  "weight_g": number,
+  "nutrition": {
+    "calories": number,
+    "protein": number,
+    "carbs": number,
+    "fat": number,
+    "fiber": number
+  }
+}
 
-        Rules:
-        1. Use standard USDA nutrition database values
-        2. Provide realistic nutrition values for the specified food
-        3. Include typical serving size information
-        4. Return valid JSON only, no markdown formatting
-        5. If the food is not recognized, indicate with null values
-      `;
+Use USDA values. Return valid JSON only, no markdown.`;
 
-      const result = await this.model.generateContent(prompt);
+      const result = await this.makeApiCallWithRetry(
+        () => this.model.generateContent(prompt),
+        this.maxRetries
+      );
+
       const response = await result.response;
       const text = response.text();
 
-      // Parse the JSON response
-      let nutritionData;
-      try {
-        const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
-        nutritionData = JSON.parse(cleanText);
-      } catch (parseError) {
-        console.error('Failed to parse Gemini response:', text);
-        throw new Error('Invalid response format from Gemini API');
-      }
-
-      // Transform the response for text-based queries
-      return this.transformTextResponse(nutritionData);
+      const nutritionData = this.parseJsonResponse(text);
+      const processingTime = Date.now() - startTime;
+      
+      console.log(`✅ Text analysis completed in ${processingTime}ms`);
+      
+      return this.transformOptimizedResponse(nutritionData, 'text');
 
     } catch (error) {
-      console.error('Gemini API error:', error);
-      throw new Error(`Failed to analyze food: ${error.message}`);
+      const processingTime = Date.now() - startTime;
+      console.error(`❌ Text analysis failed after ${processingTime}ms:`, error);
+      throw new Error(`Analysis failed: ${error.message}`);
+    }
+  }
+
+  // Utility methods
+  async makeApiCallWithRetry(apiCall, maxRetries) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Attempt ${attempt}/${maxRetries}`);
+        
+        return await Promise.race([
+          apiCall(),
+          this.timeoutPromise(this.timeout, `API timeout after ${this.timeout}ms`)
+        ]);
+      } catch (error) {
+        console.warn(`❌ Attempt ${attempt} failed:`, error.message);
+        
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        // Exponential backoff
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`⏳ Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  timeoutPromise(ms, message) {
+    return new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), ms);
+    });
+  }
+
+  parseJsonResponse(text) {
+    try {
+      // Clean the response text
+      const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+      return JSON.parse(cleanText);
+    } catch (parseError) {
+      console.error('Failed to parse response:', text);
+      throw new Error('Invalid JSON response from API');
     }
   }
 
@@ -228,7 +318,6 @@ class GeminiService {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
-        // Remove the data URL prefix to get just the base64 string
         const base64 = reader.result.split(',')[1];
         resolve(base64);
       };
@@ -237,89 +326,107 @@ class GeminiService {
     });
   }
 
-  transformGeminiResponse(geminiData) {
-    if (!geminiData || !geminiData.foods || geminiData.foods.length === 0) {
-      throw new Error('No food items detected in the image');
-    }
+  transformOptimizedResponse(data, type) {
+    if (type === 'image') {
+      if (!data || !data.foods || data.foods.length === 0) {
+        throw new Error('No food items detected in the image');
+      }
 
-    const primaryFood = geminiData.foods[0];
-    const totalItems = geminiData.foods.length;
-
-    // Calculate combined nutrition if multiple foods
-    let combinedNutrition = { ...primaryFood.nutrition };
-    if (totalItems > 1) {
-      combinedNutrition = geminiData.foods.reduce((acc, food) => {
+      const totalNutrition = data.total || data.foods.reduce((acc, food) => {
+        const nutrition = food.nutrition;
         return {
-          calories: (parseFloat(acc.calories) + parseFloat(food.nutrition.calories)) / 2,
-          protein: (parseFloat(acc.protein) + parseFloat(food.nutrition.protein)) / 2,
-          carbs: (parseFloat(acc.carbs) + parseFloat(food.nutrition.carbs)) / 2,
-          fat: (parseFloat(acc.fat) + parseFloat(food.nutrition.fat)) / 2,
-          fiber: (parseFloat(acc.fiber || 0) + parseFloat(food.nutrition.fiber || 0)) / 2,
-          sugar: (parseFloat(acc.sugar || 0) + parseFloat(food.nutrition.sugar || 0)) / 2,
-          sodium: (parseFloat(acc.sodium || 0) + parseFloat(food.nutrition.sodium || 0)) / 2
+          calories: (acc.calories || 0) + (nutrition.calories || 0),
+          protein: (acc.protein || 0) + (nutrition.protein || 0),
+          carbs: (acc.carbs || 0) + (nutrition.carbs || 0),
+          fat: (acc.fat || 0) + (nutrition.fat || 0),
+          fiber: (acc.fiber || 0) + (nutrition.fiber || 0)
         };
-      }, combinedNutrition);
-    }
+      }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
 
-    return {
-      nutrition: {
-        calories: Math.round(parseFloat(combinedNutrition.calories) || 0),
-        protein: Math.round(parseFloat(combinedNutrition.protein) || 0),
-        carbs: Math.round(parseFloat(combinedNutrition.carbs) || 0),
-        fat: Math.round(parseFloat(combinedNutrition.fat) || 0),
-        fiber: Math.round(parseFloat(combinedNutrition.fiber) || 0)
-      },
-      category: {
-        name: totalItems > 1 ? `Mixed Foods (${totalItems} items)` : primaryFood.name
-      },
-      source: 'Google Gemini AI',
-      isRealData: true,
-      itemCount: totalItems,
-      detailedItems: geminiData.foods.map(food => ({
-        name: food.name,
-        calories: Math.round(parseFloat(food.nutrition.calories) || 0),
-        protein: Math.round(parseFloat(food.nutrition.protein) || 0),
-        carbs: Math.round(parseFloat(food.nutrition.carbs) || 0),
-        fat: Math.round(parseFloat(food.nutrition.fat) || 0),
-        fiber: Math.round(parseFloat(food.nutrition.fiber) || 0),
-        confidence: food.confidence
-      })),
-      servingInfo: primaryFood.serving_info ? {
-        description: primaryFood.serving_info.typical_serving,
-        weight: primaryFood.serving_info.weight_per_serving,
-        unit: 'g'
-      } : null,
-      analysisNotes: geminiData.analysis?.notes || null
-    };
+      return {
+        nutrition: {
+          calories: Math.round(totalNutrition.calories || 0),
+          protein: Math.round(totalNutrition.protein || 0),
+          carbs: Math.round(totalNutrition.carbs || 0),
+          fat: Math.round(totalNutrition.fat || 0),
+          fiber: Math.round(totalNutrition.fiber || 0)
+        },
+        category: {
+          name: data.foods.length > 1 ? `Mixed Foods (${data.foods.length} items)` : data.foods[0].name
+        },
+        source: 'Google Gemini AI - Fast Analysis',
+        isRealData: true,
+        itemCount: data.foods.length,
+        confidence: data.confidence || 'medium',
+        detailedItems: data.foods.map(food => ({
+          name: food.name,
+          portionDescription: food.portion || 'Unknown portion',
+          estimatedWeight: food.weight_g || 'Unknown',
+          calories: Math.round(food.nutrition.calories || 0),
+          protein: Math.round(food.nutrition.protein || 0),
+          carbs: Math.round(food.nutrition.carbs || 0),
+          fat: Math.round(food.nutrition.fat || 0),
+          fiber: Math.round(food.nutrition.fiber || 0)
+        }))
+      };
+    } else {
+      // Text analysis
+      if (!data || !data.nutrition) {
+        throw new Error('No nutrition data found');
+      }
+
+      return {
+        nutrition: {
+          calories: Math.round(data.nutrition.calories || 0),
+          protein: Math.round(data.nutrition.protein || 0),
+          carbs: Math.round(data.nutrition.carbs || 0),
+          fat: Math.round(data.nutrition.fat || 0),
+          fiber: Math.round(data.nutrition.fiber || 0)
+        },
+        category: {
+          name: data.name
+        },
+        source: 'Google Gemini AI - Fast Analysis',
+        isRealData: true,
+        itemCount: 1,
+        servingInfo: {
+          description: data.serving,
+          weight: data.weight_g,
+          unit: 'g'
+        },
+        detailedItems: [{
+          name: data.name,
+          portionDescription: data.serving || 'Unknown portion',
+          estimatedWeight: data.weight_g || 'Unknown',
+          calories: Math.round(data.nutrition.calories || 0),
+          protein: Math.round(data.nutrition.protein || 0),
+          carbs: Math.round(data.nutrition.carbs || 0),
+          fat: Math.round(data.nutrition.fat || 0),
+          fiber: Math.round(data.nutrition.fiber || 0)
+        }]
+      };
+    }
+  }
+
+  // Legacy methods for backward compatibility
+  transformGeminiResponse(geminiData) {
+    console.warn('Using legacy method. Consider updating to use the optimized version.');
+    return this.transformOptimizedResponse(geminiData, 'image');
   }
 
   transformTextResponse(geminiData) {
-    if (!geminiData || !geminiData.food) {
-      throw new Error('No nutrition data found for the specified food');
-    }
+    console.warn('Using legacy method. Consider updating to use the optimized version.');
+    return this.transformOptimizedResponse(geminiData, 'text');
+  }
 
-    const food = geminiData.food;
+  transformGeminiResponseForServings(geminiData) {
+    console.warn('Using legacy method. Consider updating to use the optimized version.');
+    return this.transformOptimizedResponse(geminiData, 'image');
+  }
 
-    return {
-      nutrition: {
-        calories: Math.round(parseFloat(food.nutrition.calories) || 0),
-        protein: Math.round(parseFloat(food.nutrition.protein) || 0),
-        carbs: Math.round(parseFloat(food.nutrition.carbs) || 0),
-        fat: Math.round(parseFloat(food.nutrition.fat) || 0),
-        fiber: Math.round(parseFloat(food.nutrition.fiber) || 0)
-      },
-      category: {
-        name: food.name
-      },
-      source: 'Google Gemini AI',
-      isRealData: true,
-      itemCount: 1,
-      servingInfo: food.serving_info ? {
-        description: food.serving_info.typical_serving,
-        weight: food.serving_info.weight_per_serving,
-        unit: 'g'
-      } : null
-    };
+  transformTextResponseForServings(geminiData) {
+    console.warn('Using legacy method. Consider updating to use the optimized version.');
+    return this.transformOptimizedResponse(geminiData, 'text');
   }
 }
 

@@ -4,7 +4,7 @@ import React from 'react';
 const NutritionCard = ({ data }) => {
   if (!data) return null;
 
-  const { nutrition, category, servingInfo, itemCount, detailedItems } = data;
+  const { nutrition, category, servingInfo, itemCount, detailedItems, portionAnalysis } = data;
 
   return (
     <div className="bg-white rounded-xl shadow-lg border-2 border-green-300 overflow-hidden">
@@ -79,7 +79,7 @@ const NutritionCard = ({ data }) => {
           </div>
         </div>
 
-{/* Macronutrient Bar */}
+        {/* Macronutrient Bar */}
         <div className="mt-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-2">
             Macronutrient Distribution
@@ -166,48 +166,125 @@ const NutritionCard = ({ data }) => {
           </div>
         </div>
 
-        {/* Additional Info */}
-        <div className="mt-6 pt-4 border-t border-gray-200">
-          {/* Detailed Items */}
-          {detailedItems && detailedItems.length > 1 && (
-            <div className="mt-3">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">📊 Food Breakdown:</h4>
-              <div className="space-y-1">
-                {detailedItems.map((item, index) => (
-                  <div key={index} className="text-xs text-gray-600 bg-gray-50 rounded p-2">
-                    <strong>{item.name}:</strong> {item.calories} cal, {item.protein}g protein, {item.carbs}g carbs, {item.fat}g fat, {item.fiber}g fiber
+        {/* Food Breakdown */}
+        {detailedItems && detailedItems.length > 0 && (
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">Food Breakdown</h3>
+              {portionAnalysis && portionAnalysis.totalEstimatedWeight > 0 && (
+                <div className="text-sm text-gray-600 bg-gray-50 px-3 py-1 rounded-full">
+                  Total: ~{Math.round(portionAnalysis.totalEstimatedWeight)}g
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-4">
+              {detailedItems.map((item, index) => (
+                <div key={index} className="group hover:bg-gray-50 transition-colors duration-200 rounded-xl p-4 border border-gray-100">
+                  {/* Food Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900 text-base">{item.name}</h4>
+                      <div className="flex flex-wrap gap-3 mt-1 text-sm text-gray-600">
+                        {item.portionDescription && item.portionDescription !== 'Unknown portion' && (
+                          <span className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
+                            {item.portionDescription}
+                          </span>
+                        )}
+                        {item.estimatedWeight && item.estimatedWeight !== 'Unknown' && (
+                          <span className="flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
+                            ~{item.estimatedWeight}g
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {item.confidence && (
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${
+                        item.confidence === 'high' ? 'bg-emerald-100 text-emerald-700' :
+                        item.confidence === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {item.confidence}
+                      </span>
+                    )}
                   </div>
-                ))}
-              </div>
+                  
+                  {/* Nutrition Grid */}
+                  <div className="grid grid-cols-5 gap-3">
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-red-600">{item.calories}</div>
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">Calories</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-yellow-600">{item.carbs}g</div>
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">Carbs</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-blue-600">{item.protein}g</div>
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">Protein</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-purple-600">{item.fat}g</div>
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">Fat</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-green-600">{item.fiber}g</div>
+                      <div className="text-xs text-gray-500 uppercase tracking-wide">Fiber</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Serving Info Details */}
-          {servingInfo && servingInfo.weight && (
-            <div className="text-xs text-gray-500 mt-2">
-              Serving: {servingInfo.weight} {servingInfo.unit}
-            </div>
-          )}
-        </div>
+        {/* Serving Info Details */}
+        {servingInfo && servingInfo.weight && (
+          <div className="text-xs text-gray-500 mt-6 p-3 bg-gray-50 rounded-lg">
+            <strong>Serving Info:</strong> {servingInfo.weight} {servingInfo.unit}
+            {servingInfo.description && servingInfo.description !== servingInfo.weight && (
+              <span> ({servingInfo.description})</span>
+            )}
+          </div>
+        )}
 
         {/* Action Buttons */}
-        <div className="mt-4 flex gap-2">
+        <div className="mt-6 flex gap-3">
           <button 
             onClick={() => {
-              navigator.clipboard?.writeText(
-                `${category.name}: ${nutrition.calories} calories, ${nutrition.carbs}g carbs, ${nutrition.protein}g protein, ${nutrition.fat}g fat, ${nutrition.fiber}g fiber`
-              );
+              // Enhanced copy with portion information
+              let copyText = `${category.name}: ${nutrition.calories} calories, ${nutrition.carbs}g carbs, ${nutrition.protein}g protein, ${nutrition.fat}g fat, ${nutrition.fiber}g fiber`;
+              
+              if (portionAnalysis?.totalEstimatedWeight > 0) {
+                copyText += `\nTotal Weight: ~${Math.round(portionAnalysis.totalEstimatedWeight)}g`;
+              }
+              
+              if (detailedItems && detailedItems.length > 1) {
+                copyText += '\n\nBreakdown:';
+                detailedItems.forEach(item => {
+                  copyText += `\n• ${item.name}`;
+                  if (item.portionDescription && item.portionDescription !== 'Unknown portion') {
+                    copyText += ` (${item.portionDescription})`;
+                  }
+                  copyText += `: ${item.calories} cal`;
+                });
+              }
+              
+              navigator.clipboard?.writeText(copyText);
             }}
-            className="flex-1 bg-gray-100 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+            className="flex-1 bg-gray-100 text-gray-700 py-3 px-4 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors duration-200 flex items-center justify-center gap-2"
           >
-            📋 Copy Info
+            <span>📋</span>
+            Copy Info
           </button>
           
           <button 
             onClick={() => window.location.reload()}
-            className="flex-1 bg-green-100 text-green-700 py-2 px-3 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
+            className="flex-1 bg-green-100 text-green-700 py-3 px-4 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors duration-200 flex items-center justify-center gap-2"
           >
-            🔍 Search Again
+            <span>🔍</span>
+            Search Again
           </button>
         </div>
       </div>
