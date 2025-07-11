@@ -27,7 +27,7 @@ const TestImageGuide = ({ isVisible, onClose }) => {
     {
       name: "Prepared Dishes",
       description: "Cooked meals and restaurant foods",
-      tips: "AI estimates based on visible ingredients"
+      tips: "AI estimates based on visible ingredient"
     }
   ];
 
