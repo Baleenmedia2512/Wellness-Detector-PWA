@@ -4,4 +4,5 @@
     <string name="title_activity_main">wellness-buddy</string>
     <string name="package_name">com.wellness.buddy</string>
     <string name="custom_url_scheme">com.wellness.buddy</string>
+    <string name="server_client_id">155478550721-suf2sas620qebja2hbplfh20gktmom1k.apps.googleusercontent.com</string>
 </resources>

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "610941252952",
+    "project_id": "wellness-buddy-5de14",
+    "storage_bucket": "wellness-buddy-5de14.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:610941252952:android:6b8d2d05131e991857e12d",
+        "android_client_info": {
+          "package_name": "com.wellness.buddy"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "610941252952-bvekmd4deh4evgpptbnkff3fpsla6bfk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.wellness.buddy",
+            "certificate_hash": "2bebbbf435e9301b34cbb85d32041e5f32f69077"
+          }
+        },
+        {
+          "client_id": "610941252952-u9h8srgfr879aucl4sbc8h3f6i68cq7n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArJQHNTFraEOp3ENdd67T6aV49hCCxoUo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "610941252952-u9h8srgfr879aucl4sbc8h3f6i68cq7n.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

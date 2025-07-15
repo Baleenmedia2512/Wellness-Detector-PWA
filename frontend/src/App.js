@@ -181,26 +181,29 @@ function App() {
   };
 
   const handleSignIn = async () => {
-  try {
-    setLoading(true);
-    const user = await signInWithGoogle();
+    try {
+      setLoading(true);
+      setError(null);
 
-    // Save user in DB
-    await fetch(`${apiBaseUrl}/api/save-google-user`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: user.email,
-        displayName: user.displayName || user.email.split('@')[0]
-      })
-    });
-  } catch (error) {
-    setError(error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+      const user = await signInWithGoogle();
 
+      if (user) {
+        await fetch(`${apiBaseUrl}/api/save-google-user`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: user.email,
+            displayName: user.displayName || user.email.split("@")[0]
+          })
+        });
+      }
+    } catch (error) {
+      console.error("Sign in error:", error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
