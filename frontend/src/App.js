@@ -8,8 +8,16 @@ import LoadingSpinner from './components/LoadingSpinner';
 import Login from './components/Login';
 import { geminiService } from './services/geminiService';
 import { cameraService } from './services/cameraService';
-import { auth, signInWithGoogle, signOutUser } from './services/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { 
+  signInWithGoogle, 
+  signInWithGooglePopup,
+  signOutUser, 
+  handleRedirectResult, 
+  onAuthStateChange,
+  isGoogleUser,
+  isMobileDevice,
+  cleanup
+} from './services/firebase';
 import Header from './components/Header';
 
 function App() {
@@ -19,10 +27,7 @@ function App() {
   const [nutritionData, setNutritionData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  // const [apiInfo, _setApiInfo] = useState(geminiService.getApiInfo());
   const [showTestGuide, setShowTestGuide] = useState(false);
-  // const [_cameraInfo, setCameraInfo] = useState(null);
-  // const [_cameraStatusMessage, setCameraStatusMessage] = useState('');
   const [showCameraTest, setShowCameraTest] = useState(false);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -31,8 +36,29 @@ function App() {
   );
   const fileInputRef = useRef(null);
 
+  // Handle redirect result on app load
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const checkRedirectResult = async () => {
+      try {
+        const resultUser = await handleRedirectResult();
+        if (resultUser) {
+          console.log('✅ Redirect authentication completed');
+          setUser(resultUser);
+          setAuthLoading(false);
+        }
+      } catch (error) {
+        console.error('❌ Redirect result error:', error);
+        setError('Authentication failed. Please try again.');
+        setAuthLoading(false);
+      }
+    };
+
+    checkRedirectResult();
+  }, []);
+
+  // Auth state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange((user) => {
       setUser(user);
       setAuthLoading(false);
     });
@@ -40,35 +66,46 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Camera setup for authenticated users
   useEffect(() => {
     if (user) {
       const checkCamera = async () => {
         try {
           const info = await cameraService.getCameraInfo();
           const message = await cameraService.getCameraStatusMessage();
-          console.log(info, message)
-          // setCameraInfo(info);
-          // setCameraStatusMessage(message);
+          console.log('📷 Camera info:', info, message);
         } catch (error) {
-          console.warn('Failed to check camera:', error);
-          // setCameraStatusMessage('Camera status unknown. You can still upload photos from gallery.');
+          console.warn('⚠️ Camera check failed:', error);
         }
       };
       checkCamera();
     }
   }, [user]);
 
+  // Handle OTP user restoration
   useEffect(() => {
-  if (isOtpVerified && !user) {
-    const otpUser = localStorage.getItem('otpUser');
-    if (otpUser) {
-      setUser(JSON.parse(otpUser));
+    if (isOtpVerified && !user) {
+      const otpUser = localStorage.getItem('otpUser');
+      if (otpUser) {
+        try {
+          setUser(JSON.parse(otpUser));
+        } catch (error) {
+          console.error('❌ Failed to restore OTP user:', error);
+          localStorage.removeItem('otpUser');
+          setIsOtpVerified(false);
+        }
+      }
     }
-  }
-}, [isOtpVerified, user]);
+  }, [isOtpVerified, user]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, []);
 
-  const handleImageSelect = (file) => {
+  const handleImageSelect = async (file) => {
     if (!user) {
       setError('Please sign in to analyze food images');
       return;
@@ -77,33 +114,18 @@ function App() {
     setSelectedImage(file);
     setError(null);
     setNutritionData(null);
-    console.log(selectedImage)
 
     const reader = new FileReader();
     reader.onload = async (e) => {
       setImagePreview(e.target.result);
 
-      // ✅ Analyze food after preview is ready
+      // Analyze food after preview is ready
       try {
         setLoading(true);
         const result = await geminiService.analyzeImageForNutrition(file);
         setNutritionData(result);
       } catch (err) {
-        let friendlyMessage = '❌ Food analysis failed. Please try again later.';
-        const rawMessage = err.message || '';
-
-        if (rawMessage.includes('503') || rawMessage.includes('overloaded')) {
-          friendlyMessage = '⚡ Gemini AI is currently busy. Please try again in a few minutes.';
-        } else if (rawMessage.includes('No food items detected')) {
-          friendlyMessage = '⚠️ No food items were detected in the image. Try with a clearer photo.';
-        } else if (rawMessage.includes('Invalid response format')) {
-          friendlyMessage = '⚙️ Received unexpected data from Gemini API. Please try again later.';
-        } else if (rawMessage.includes('network') || rawMessage.includes('Failed to fetch')) {
-          friendlyMessage = '🌐 Network issue. Please check your internet connection.';
-        } else if (rawMessage.includes('API key is not configured')) {
-          friendlyMessage = '⚙️ Gemini API key is missing or invalid. Please check your setup.';
-        }
-
+        const friendlyMessage = getFriendlyErrorMessage(err);
         setError(friendlyMessage);
         console.error('❌ Gemini analysis error:', err);
       } finally {
@@ -114,58 +136,23 @@ function App() {
     reader.readAsDataURL(file);
   };
 
-  // const analyzeFood = async () => {
-  //   if (!user) {
-  //     setError('🚫 Please sign in to analyze food images.');
-  //     return;
-  //   }
+  const getFriendlyErrorMessage = (error) => {
+    const rawMessage = error.message || '';
 
-  //   if (!selectedImage) {
-  //     setError('📸 Please upload an image to analyze.');
-  //     return;
-  //   }
+    if (rawMessage.includes('503') || rawMessage.includes('overloaded')) {
+      return '⚡ Server is currently busy. Please try again in a few minutes.';
+    } else if (rawMessage.includes('No food items detected')) {
+      return '⚠️ No food items were detected in the image. Try with a clearer photo.';
+    } else if (rawMessage.includes('Invalid response format')) {
+      return '⚙️ Received unexpected data from server. Please try again later.';
+    } else if (rawMessage.includes('network') || rawMessage.includes('Failed to fetch')) {
+      return '🌐 Network issue. Please check your internet connection.';
+    } else if (rawMessage.includes('API key is not configured')) {
+      return '⚙️ Server is missing or invalid. Please check your setup.';
+    }
 
-  //   // if (!apiInfo.hasCredentials) {
-  //   //   setError(
-  //   //     '⚙️ Gemini API key is missing. Please add your API key to the environment variables. Visit: https://makersuite.google.com/app/apikey'
-  //   //   );
-  //   //   return;
-  //   // }
-
-  //   setLoading(true);
-  //   setError(null);
-
-  //   try {
-  //     const result = await geminiService.analyzeImageForNutrition(selectedImage);
-  //     setNutritionData(result);
-  //   } catch (err) {
-  //     let friendlyMessage = '❌ Food analysis failed. Please try again later.';
-  //     const rawMessage = err.message || '';
-
-  //     if (rawMessage.includes('503') || rawMessage.includes('overloaded')) {
-  //       friendlyMessage = '⚡ Gemini AI is currently busy. Please try again in a few minutes.';
-  //     } else if (rawMessage.includes('No food items detected')) {
-  //       friendlyMessage = '⚠️ No food items were detected in the image. Try with a clearer photo.';
-  //     } else if (rawMessage.includes('Invalid response format')) {
-  //       friendlyMessage = '⚙️ Received unexpected data from Gemini API. Please try again later.';
-  //     } else if (rawMessage.includes('network') || rawMessage.includes('Failed to fetch')) {
-  //       friendlyMessage = '🌐 Network issue. Please check your internet connection.';
-  //     } else if (rawMessage.includes('API key is not configured')) {
-  //       friendlyMessage = '⚙️ Gemini API key is missing or invalid. Please check your setup.';
-  //     }
-
-  //     setError(friendlyMessage);
-  //     console.error('❌ Gemini analysis error:', err);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
-  // useEffect(() => {
-  //   if (selectedImage && user) {
-  //     analyzeFood();
-  //   }
-  // }, [selectedImage, user]);
+    return '❌ Food analysis failed. Please try again later.';
+  };
 
   const resetApp = () => {
     setSelectedImage(null);
@@ -175,33 +162,107 @@ function App() {
     setUser(null);
     setIsOtpVerified(false);
     localStorage.removeItem('isOtpVerified');
+    localStorage.removeItem('otpUser');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  const handleSignIn = async () => {
+  const handleSignIn = async (forceRedirect = false) => {
     try {
       setLoading(true);
       setError(null);
 
-      const user = await signInWithGoogle();
+      console.log('🔐 Starting Google sign-in process');
+      const user = await signInWithGoogle(forceRedirect);
 
+      // For popup authentication, user is returned immediately
       if (user) {
-        await fetch(`${apiBaseUrl}/api/save-google-user`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: user.email,
-            displayName: user.displayName || user.email.split("@")[0]
-          })
-        });
+        console.log('✅ User signed in via popup:', user.email);
+        await saveUserToBackend(user);
+        setUser(user);
+      } else {
+        // For redirect authentication, user will be set via auth state change
+        console.log('🔄 Redirect initiated, waiting for result...');
       }
     } catch (error) {
-      console.error("Sign in error:", error);
-      setError(error.message);
+      console.error('❌ Sign in error:', error);
+      
+      // Handle specific error cases
+      if (error.code === 'auth/popup-blocked') {
+        setError('Popup was blocked. Trying redirect method...');
+        // Automatically retry with redirect
+        setTimeout(() => {
+          console.log('🔄 Retrying with redirect due to popup block');
+          handleSignIn(true);
+        }, 1000);
+        return;
+      }
+      
+      if (error.code === 'auth/popup-closed-by-user') {
+        setError('Sign-in popup was closed. Please try again.');
+        setLoading(false);
+        return;
+      }
+      
+      setError(getAuthErrorMessage(error));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle popup sign-in specifically for web
+  const handlePopupSignIn = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('🪟 Starting popup sign-in');
+      const user = await signInWithGooglePopup();
+      
+      if (user) {
+        console.log('✅ Popup sign-in successful:', user.email);
+        await saveUserToBackend(user);
+        setUser(user);
+      }
+    } catch (error) {
+      console.error('❌ Popup sign-in error:', error);
+      setError(getAuthErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAuthErrorMessage = (error) => {
+    switch (error.code) {
+      case 'auth/popup-closed-by-user':
+        return 'Sign in was cancelled. Please try again.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your connection and try again.';
+      case 'auth/too-many-requests':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'auth/user-disabled':
+        return 'This account has been disabled. Please contact support.';
+      default:
+        return error.message || 'Authentication failed. Please try again.';
+    }
+  };
+
+  const saveUserToBackend = async (user) => {
+    try {
+      await fetch(`${apiBaseUrl}/api/save-google-user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          displayName: user.displayName || user.email.split("@")[0],
+          photoURL: user.photoURL || null,
+          uid: user.uid
+        })
+      });
+    } catch (error) {
+      console.error('❌ Failed to save user to backend:', error);
+      // Don't throw - user is still authenticated
     }
   };
 
@@ -210,52 +271,54 @@ function App() {
       setLoading(true);
       await signOutUser();
       resetApp();
-      setIsOtpVerified(false);
-      localStorage.removeItem('isOtpVerified');
     } catch (error) {
-      setError(error.message);
+      console.error('❌ Sign out error:', error);
+      setError('Failed to sign out. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleOtpVerified = () => {
+    setIsOtpVerified(true);
+    localStorage.setItem('isOtpVerified', 'true');
+  };
+
+  // Loading state
   if (authLoading) {
     return <LoadingSpinner context="normal" />;
   }
 
-// 1. If no Firebase user & OTP not yet verified → Show Login
-if (!user && !isOtpVerified) {
-  return (
-    <Login
-      onSignIn={handleSignIn}
-      loading={loading}
-      onOtpVerified={() => {
-        setIsOtpVerified(true);
-        localStorage.setItem('isOtpVerified', 'true');
-      }}
-    />
-  );
-}
+  // Authentication logic
+  // 1. If no Firebase user & OTP not yet verified → Show Login
+  if (!user && !isOtpVerified) {
+    return (
+      <Login
+        onSignIn={isMobileDevice() ? handleSignIn : handlePopupSignIn}
+        loading={loading}
+        error={error}
+        onOtpVerified={handleOtpVerified}
+      />
+    );
+  }
 
-// 2. Safely check for Google User (only if user exists)
-const isGoogleUser = user?.providerData?.[0]?.providerId === 'google.com';
+  // 2. Safely check for Google User (only if user exists)
+  const isGoogleUserCheck = user && isGoogleUser(user);
 
-// 3. If user is NOT Google & OTP not yet verified → Force OTP Login
-if (!isOtpVerified && !isGoogleUser) {
-  return (
-    <Login
-      onSignIn={handleSignIn}
-      loading={loading}
-      onOtpVerified={() => {
-        setIsOtpVerified(true);
-        localStorage.setItem('isOtpVerified', 'true');
-      }}
-      forceOtpVerification={true}
-    />
-  );
-}
+  // 3. If user is NOT Google & OTP not yet verified → Force OTP Login
+  if (!isOtpVerified && !isGoogleUserCheck) {
+    return (
+      <Login
+        onSignIn={isMobileDevice() ? handleSignIn : handlePopupSignIn}
+        loading={loading}
+        error={error}
+        onOtpVerified={handleOtpVerified}
+        forceOtpVerification={true}
+      />
+    );
+  }
 
-
+  // Main app interface
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
       <Header
@@ -263,6 +326,7 @@ if (!isOtpVerified && !isGoogleUser) {
         onTestCamera={() => setShowCameraTest(true)}
         onSignOut={handleSignOut}
       />
+      
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
         <ImageUpload
           onImageSelect={handleImageSelect}

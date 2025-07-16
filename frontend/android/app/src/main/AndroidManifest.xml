@@ -19,6 +19,11 @@
             android:name="com.google.android.gms.client_id"
             android:value="@string/server_client_id" />
 
+        <!-- Add this meta-data for Firebase -->
+        <meta-data
+            android:name="com.google.firebase.auth.USE_EMULATOR"
+            android:value="false" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:name=".MainActivity"
@@ -30,6 +35,26 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Add these intent filters for Firebase Auth redirect -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Replace with your actual scheme from Firebase config -->
+                <data android:scheme="wellnessbuddy" />
+                <data android:host="auth" />
+            </intent-filter>
+
+            <!-- For Google Sign-In redirect -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https"
+                    android:host="your-firebase-domain.firebaseapp.com"
+                    android:pathPrefix="/__/auth/handler" />
             </intent-filter>
 
         </activity>
