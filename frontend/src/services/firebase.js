@@ -1,4 +1,3 @@
-// frontend/src/services/firebase.js
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
@@ -10,7 +9,6 @@ import {
   onAuthStateChanged
 } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
-import { SocialLogin } from '@capgo/capacitor-social-login';
 
 // 🔐 Correct Google OAuth Client IDs
 const WEB_CLIENT_ID = '610941252952-u9h8srgfr879aucl4sbc8h3f6i68cq7n.apps.googleusercontent.com';
@@ -71,23 +69,7 @@ const clearRedirectPending = () => {
 // 🚀 Main sign-in function
 export const signInWithGoogle = async (forceRedirect = false) => {
   try {
-    const isAndroidNative = Capacitor.getPlatform() === 'android';
-
-    if (isAndroidNative) {
-      console.log('🤖 Using native Google sign-in (Android)');
-      const result = await SocialLogin.signIn({
-        provider: 'google',
-        webClientId: WEB_CLIENT_ID,
-        androidClientId: ANDROID_CLIENT_ID,
-        scopes: 'profile email'
-      });
-
-      const credential = GoogleAuthProvider.credential(result.idToken);
-      const firebaseResult = await signInWithCredential(auth, credential);
-      return firebaseResult.user;
-    }
-
-    // 🌐 Web-based login
+    // 🌐 Web-based login only
     const useRedirect = forceRedirect || isMobile();
     if (useRedirect) {
       console.log('🔄 Using redirect authentication for mobile');

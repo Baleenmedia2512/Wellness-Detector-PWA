@@ -3,6 +3,7 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.wellnessbuddy.app"
     compileSdk rootProject.ext.compileSdkVersion
+    
     defaultConfig {
         applicationId "com.wellnessbuddy.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -10,22 +11,29 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
 }
 
 repositories {
-    flatDir{
+    google()
+    mavenCentral()
+    flatDir {
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }
@@ -40,10 +48,24 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4' // For Java 8+ support
 }
 
+// Apply Capacitor files with proper ordering
 apply from: 'capacitor.build.gradle'
+apply from: "custom-capacitor.gradle"
 
+// Universal Java version enforcement
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs += [
+        "-Xlint:unchecked",
+        "-Xlint:deprecation"
+    ]
+    options.encoding = 'UTF-8'
+}
+
+
+// Handle Google Services if present
 try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {
