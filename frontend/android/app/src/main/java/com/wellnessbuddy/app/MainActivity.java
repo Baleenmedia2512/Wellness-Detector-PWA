@@ -1,4 +1,4 @@
-package com.wellness.buddy;
+package com.wellnessbuddy.app;
 
 import com.getcapacitor.BridgeActivity;
 

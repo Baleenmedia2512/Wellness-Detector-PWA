@@ -41,6 +41,7 @@ function App() {
     const checkRedirectResult = async () => {
       try {
         const resultUser = await handleRedirectResult();
+        console.log('result user', resultUser)
         if (resultUser) {
           console.log('✅ Redirect authentication completed');
           setUser(resultUser);

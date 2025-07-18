@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.wellness.buddy">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.wellnessbuddy.app">
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -30,26 +30,22 @@
             </intent-filter>
 
             <!-- Add these intent filters for Firebase Auth redirect -->
-            <intent-filter>
+            <!-- <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
+                <category android:name="android.intent.category.BROWSABLE" /> -->
                 <!-- Replace with your actual scheme from Firebase config -->
-                <data android:scheme="wellnessbuddy" />
+                <!-- <data android:scheme="wellnessbuddy" />
                 <data android:host="auth" />
-            </intent-filter>
+            </intent-filter> -->
 
             <!-- For Google Sign-In redirect -->
-            <intent-filter android:autoVerify="true">
+            <!-- <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data
-                    android:scheme="https"
-                    android:host="your-firebase-domain.firebaseapp.com"
-                    android:pathPrefix="/__/auth/handler"
-                />
-            </intent-filter>
+                <data android:scheme="wellnessbuddy" android:host="auth" />
+            </intent-filter> -->
         </activity>
 
         <provider

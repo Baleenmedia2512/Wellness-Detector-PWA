@@ -9,37 +9,42 @@ import {
   signInWithCredential,
   onAuthStateChanged
 } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 
-// Firebase config
+// 🔐 Correct Google OAuth Client IDs
+const WEB_CLIENT_ID = '610941252952-u9h8srgfr879aucl4sbc8h3f6i68cq7n.apps.googleusercontent.com';
+const ANDROID_CLIENT_ID = '610941252952-glm3ubnme6bs3cithddg0b6vnq8sojq3.apps.googleusercontent.com';
+
+// 🔧 Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyA2_ukaeoH-Pka7o9JFxDIocb8pm1c5o08",
-  authDomain: "wellness-buddy-5de14.firebaseapp.com",
-  projectId: "wellness-buddy-5de14",
-  storageBucket: "wellness-buddy-5de14.firebasestorage.app",
-  messagingSenderId: "610941252952",
-  appId: "1:610941252952:web:5a009bc00697f5be57e12d",
-  measurementId: "G-7QTHHT5PJC"
+  apiKey: 'AIzaSyArJQHNTFraEOp3ENdd67T6aV49hCCxoUo',
+  authDomain: 'wellness-buddy-5de14.firebaseapp.com',
+  projectId: 'wellness-buddy-5de14',
+  storageBucket: 'wellness-buddy-5de14.appspot.com',
+  messagingSenderId: '610941252952',
+  appId: '1:610941252952:android:a04c921f5a95815857e12d',
 };
 
-// Initialize Firebase app & auth
+// 🔥 Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Google Provider
+// 🔐 Google Provider for web
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('email');
 googleProvider.addScope('profile');
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Device detection
+// 🧠 Device detection
 const isMobile = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 };
 
-// Enhanced redirect session management
+// 🔁 Enhanced redirect tracking
 const REDIRECT_KEY = 'google_auth_redirect_pending';
 const REDIRECT_TIMESTAMP_KEY = 'google_auth_redirect_timestamp';
-const REDIRECT_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const REDIRECT_TIMEOUT = 5 * 60 * 1000;
 
 const setRedirectPending = () => {
   sessionStorage.setItem(REDIRECT_KEY, 'true');
@@ -49,18 +54,12 @@ const setRedirectPending = () => {
 const isRedirectPending = () => {
   const pending = sessionStorage.getItem(REDIRECT_KEY) === 'true';
   const timestamp = sessionStorage.getItem(REDIRECT_TIMESTAMP_KEY);
-  
   if (!pending || !timestamp) return false;
-  
-  // Check if redirect is too old (timeout)
-  const now = Date.now();
-  const redirectTime = parseInt(timestamp);
-  
-  if (now - redirectTime > REDIRECT_TIMEOUT) {
+
+  if (Date.now() - parseInt(timestamp) > REDIRECT_TIMEOUT) {
     clearRedirectPending();
     return false;
   }
-  
   return true;
 };
 
@@ -69,46 +68,57 @@ const clearRedirectPending = () => {
   sessionStorage.removeItem(REDIRECT_TIMESTAMP_KEY);
 };
 
-// 🔐 Google sign-in with popup for web, redirect for mobile
+// 🚀 Main sign-in function
 export const signInWithGoogle = async (forceRedirect = false) => {
   try {
+    const isAndroidNative = Capacitor.getPlatform() === 'android';
+
+    if (isAndroidNative) {
+      console.log('🤖 Using native Google sign-in (Android)');
+      const result = await SocialLogin.signIn({
+        provider: 'google',
+        webClientId: WEB_CLIENT_ID,
+        androidClientId: ANDROID_CLIENT_ID,
+        scopes: 'profile email'
+      });
+
+      const credential = GoogleAuthProvider.credential(result.idToken);
+      const firebaseResult = await signInWithCredential(auth, credential);
+      return firebaseResult.user;
+    }
+
+    // 🌐 Web-based login
     const useRedirect = forceRedirect || isMobile();
-    
     if (useRedirect) {
-      // Use redirect for mobile or when forced
       console.log('🔄 Using redirect authentication for mobile');
       setRedirectPending();
       await signInWithRedirect(auth, googleProvider);
-      return null; // Redirect doesn't return user immediately
+      return null;
     } else {
-      // Use popup for web/desktop
       console.log('🪟 Using popup authentication for web');
       const result = await signInWithPopup(auth, googleProvider);
-      console.log('✅ Popup authentication successful');
       return result.user;
     }
   } catch (error) {
     clearRedirectPending();
-    
-    // Handle popup blocked - fallback to redirect
+
     if (error.code === 'auth/popup-blocked') {
       console.log('🚫 Popup blocked, falling back to redirect');
       setRedirectPending();
       await signInWithRedirect(auth, googleProvider);
       return null;
     }
-    
-    // Handle popup closed by user
+
     if (error.code === 'auth/popup-closed-by-user') {
-      console.log('❌ User closed popup');
       throw new Error('Sign-in was cancelled. Please try again.');
     }
-    
+
+    console.error('❌ Google Sign-in error:', error);
     throw error;
   }
 };
 
-// 🪟 Force popup sign-in (web only)
+// 🪟 Web-only popup login
 export const signInWithGooglePopup = async () => {
   try {
     console.log('🪟 Forcing popup authentication');
@@ -119,16 +129,14 @@ export const signInWithGooglePopup = async () => {
     if (error.code === 'auth/popup-blocked') {
       throw new Error('Popup was blocked by your browser. Please allow popups and try again.');
     }
-    
     if (error.code === 'auth/popup-closed-by-user') {
       throw new Error('Sign-in was cancelled. Please try again.');
     }
-    
     throw error;
   }
 };
 
-// 🔄 Enhanced redirect result handling
+// 🔄 Get redirect result
 export const handleRedirectResult = async () => {
   try {
     if (!isRedirectPending()) {
@@ -137,27 +145,24 @@ export const handleRedirectResult = async () => {
     }
 
     const result = await getRedirectResult(auth);
-
     if (result?.user) {
       clearRedirectPending();
       console.log('✅ Redirect authentication successful');
       return result.user;
     } else {
-      // Still pending or no result yet
       console.log('Redirect result pending or empty');
       return null;
     }
   } catch (error) {
     clearRedirectPending();
-    
-    // Handle common redirect errors gracefully
+
     const ignorableErrors = [
       'auth/no-current-user',
       'auth/popup-closed-by-user',
       'auth/cancelled-popup-request',
       'auth/user-cancelled'
     ];
-    
+
     if (ignorableErrors.includes(error.code)) {
       console.log('User cancelled authentication or no current user');
       return null;
@@ -168,7 +173,7 @@ export const handleRedirectResult = async () => {
   }
 };
 
-// 🚪 Enhanced sign out
+// 🚪 Sign out
 export const signOutUser = async () => {
   try {
     clearRedirectPending();
@@ -180,9 +185,10 @@ export const signOutUser = async () => {
   }
 };
 
-// 👤 Auth state observer with enhanced error handling
+// 👀 Auth state observer
 export const onAuthStateChange = (callback) => {
-  return onAuthStateChanged(auth, 
+  return onAuthStateChanged(
+    auth,
     (user) => {
       if (user) {
         console.log('✅ Auth state: User authenticated', user.email);
@@ -198,28 +204,21 @@ export const onAuthStateChange = (callback) => {
   );
 };
 
-// 🔍 Check current authentication status
+// 🔍 Check user
 export const getCurrentUser = () => {
   return new Promise((resolve, reject) => {
-    const unsubscribe = onAuthStateChanged(auth, 
-      (user) => {
-        unsubscribe();
-        resolve(user);
-      },
-      reject
-    );
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    }, reject);
   });
 };
 
-// 🛠️ Utility functions
-export const isUserSignedIn = () => {
-  return auth.currentUser !== null;
-};
+export const isUserSignedIn = () => auth.currentUser !== null;
 
 export const getUserInfo = () => {
   const user = auth.currentUser;
   if (!user) return null;
-  
   return {
     uid: user.uid,
     email: user.email,
@@ -231,7 +230,6 @@ export const getUserInfo = () => {
   };
 };
 
-// 🔐 Provider-specific utilities
 export const isGoogleUser = (user = null) => {
   const currentUser = user || auth.currentUser;
   return currentUser?.providerData?.[0]?.providerId === 'google.com';
@@ -240,22 +238,14 @@ export const isGoogleUser = (user = null) => {
 export const getAuthMethod = (user = null) => {
   const currentUser = user || auth.currentUser;
   if (!currentUser) return null;
-  
   const providerId = currentUser.providerData?.[0]?.providerId;
   switch (providerId) {
-    case 'google.com':
-      return 'google';
-    case 'phone':
-      return 'phone';
-    default:
-      return 'unknown';
+    case 'google.com': return 'google';
+    case 'phone': return 'phone';
+    default: return 'unknown';
   }
 };
 
-// 📱 Mobile-specific utilities
 export const isMobileDevice = isMobile;
 
-// 🧹 Cleanup function for component unmount
-export const cleanup = () => {
-  clearRedirectPending();
-};
+export const cleanup = () => clearRedirectPending();

@@ -1,13 +1,16 @@
 const config = {
-  appId: 'com.wellness.buddy',
-  appName: 'wellness-buddy',
+  appId: 'com.wellnessbuddy.app',
+  appName: 'Wellness Buddy',
   webDir: 'build',
   bundledWebRuntime: false,
   plugins: {
-    GoogleAuth: {
-      scopes: ['profile', 'email'],
-      serverClientId: '155478550721-suf2sas620qebja2hbplfh20gktmom1k.apps.googleusercontent.com',
-      forceCodeForRefreshToken: true
+    SocialLogin: {
+      providers: {
+        google: {
+          webClientId: '610941252952-u9h8srgfr879aucl4sbc8h3f6i68cq7n.apps.googleusercontent.com',
+          androidClientId: '610941252952-glm3ubnme6bs3cithddg0b6vnq8sojq3.apps.googleusercontent.com'
+        }
+      }
     }
   }
 };

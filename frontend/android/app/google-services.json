@@ -7,17 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:610941252952:android:6b8d2d05131e991857e12d",
+        "mobilesdk_app_id": "1:610941252952:android:a04c921f5a95815857e12d",
         "android_client_info": {
-          "package_name": "com.wellness.buddy"
+          "package_name": "com.wellnessbuddy.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "610941252952-bvekmd4deh4evgpptbnkff3fpsla6bfk.apps.googleusercontent.com",
+          "client_id": "610941252952-glm3ubnme6bs3cithddg0b6vnq8sojq3.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.wellness.buddy",
+            "package_name": "com.wellnessbuddy.app",
             "certificate_hash": "2bebbbf435e9301b34cbb85d32041e5f32f69077"
           }
         },
