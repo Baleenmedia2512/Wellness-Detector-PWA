@@ -93,15 +93,15 @@ function App() {
         const rawMessage = err.message || '';
 
         if (rawMessage.includes('503') || rawMessage.includes('overloaded')) {
-          friendlyMessage = '⚡ Gemini AI is currently busy. Please try again in a few minutes.';
+          friendlyMessage = '⚡ Our AI is a bit busy right now. Please try again shortly!';
         } else if (rawMessage.includes('No food items detected')) {
-          friendlyMessage = '⚠️ No food items were detected in the image. Try with a clearer photo.';
+          friendlyMessage = '🍽️ Hmm, we couldn’t spot any food in the photo. Try again with a clearer image.';
         } else if (rawMessage.includes('Invalid response format')) {
-          friendlyMessage = '⚙️ Received unexpected data from Gemini API. Please try again later.';
+          friendlyMessage = '🔄 Something went wrong. Please try again in a moment.';
         } else if (rawMessage.includes('network') || rawMessage.includes('Failed to fetch')) {
-          friendlyMessage = '🌐 Network issue. Please check your internet connection.';
+          friendlyMessage = '🌐 Looks like you’re offline. Please check your internet and try again.';
         } else if (rawMessage.includes('API key is not configured')) {
-          friendlyMessage = '⚙️ Gemini API key is missing or invalid. Please check your setup.';
+          friendlyMessage = '⚙️ Setup is still in progress. Please check back soon!';
         }
 
         setError(friendlyMessage);
