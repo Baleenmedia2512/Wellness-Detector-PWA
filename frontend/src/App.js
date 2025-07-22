@@ -19,8 +19,11 @@ import {
   cleanup
 } from './services/firebase';
 import Header from './components/Header';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
+import GalleryMonitor from './services/gallery-monitor';
 
-function App() {
+function WellnessBuddyApp() {
   const apiBaseUrl = process.env.REACT_APP_API_BASE_URL;
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -35,6 +38,30 @@ function App() {
     localStorage.getItem('isOtpVerified') === 'true'
   );
   const fileInputRef = useRef(null);
+
+    useEffect(() => {
+    const initializeGalleryMonitoring = async () => {
+      if (Capacitor.isNativePlatform()) {
+        // Start the gallery monitoring service
+        await GalleryMonitor.initialize();
+        
+        // Add listener for app state changes
+        App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            // App came to foreground - do an immediate check
+            GalleryMonitor.checkGallery();
+          }
+        });
+      }
+    };
+
+    initializeGalleryMonitoring();
+
+    return () => {
+      // Clean up listeners
+      App.removeAllListeners();
+    };
+  }, []);
 
   // Handle redirect result on app load
   useEffect(() => {
@@ -385,4 +412,4 @@ function App() {
   );
 }
 
-export default App;
+export default WellnessBuddyApp;
