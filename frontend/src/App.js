@@ -22,6 +22,9 @@ import Header from './components/Header';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import GalleryMonitor from './services/gallery-monitor';
+import { PermissionsAndroid } from '@capacitor/android';
+import { PushNotifications } from '@capacitor/push-notifications';
+
 
 function WellnessBuddyApp() {
   const apiBaseUrl = process.env.REACT_APP_API_BASE_URL;
@@ -38,6 +41,30 @@ function WellnessBuddyApp() {
     localStorage.getItem('isOtpVerified') === 'true'
   );
   const fileInputRef = useRef(null);
+
+  const requestAllPermissions = async () => {
+  if (!Capacitor.isNativePlatform()) return;
+
+  try {
+    // Camera permission
+    await PermissionsAndroid.requestPermission({
+      permission: 'android.permission.CAMERA',
+    });
+
+    // Storage or media access
+    await PermissionsAndroid.requestPermission({
+      permission: 'android.permission.READ_MEDIA_IMAGES',
+    });
+
+    // Notifications permission (only on Android 13+)
+    await PushNotifications.requestPermissions();
+
+    console.log('✅ Permissions requested');
+  } catch (err) {
+    console.warn('❌ Permission request failed:', err);
+  }
+};
+
 
     useEffect(() => {
     const initializeGalleryMonitoring = async () => {
@@ -95,6 +122,7 @@ function WellnessBuddyApp() {
   }, []);
 
   // Camera setup for authenticated users
+  // After login: request permissions and check camera
   useEffect(() => {
     if (user) {
       const checkCamera = async () => {
@@ -106,9 +134,12 @@ function WellnessBuddyApp() {
           console.warn('⚠️ Camera check failed:', error);
         }
       };
+
       checkCamera();
+      requestAllPermissions(); // 🔔 request permissions after login
     }
   }, [user]);
+
 
   // Handle OTP user restoration
   useEffect(() => {
