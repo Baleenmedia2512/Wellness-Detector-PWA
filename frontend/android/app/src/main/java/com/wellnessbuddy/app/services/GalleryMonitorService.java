@@ -7,11 +7,14 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.database.ContentObserver;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -22,18 +25,19 @@ import com.wellnessbuddy.app.MainActivity;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 public class GalleryMonitorService extends Service {
     private static final String TAG = "GalleryMonitorService";
     private static final String CHANNEL_ID = "GalleryMonitorChannel";
     private static final int NOTIFICATION_ID = 101;
 
-    private Handler handler;
     private ExecutorService executorService;
-    private Runnable galleryCheckRunnable;
-    private long lastCheckedTime = 0; // Tracks the last detected image time
+    private ContentObserver imageObserver;
+    private long lastCheckedTime = 0;
 
     @Override
     public void onCreate() {
@@ -57,13 +61,23 @@ public class GalleryMonitorService extends Service {
 
         Toast.makeText(this, "GalleryMonitorService Running", Toast.LENGTH_SHORT).show();
 
-        handler = new Handler(Looper.getMainLooper());
         executorService = Executors.newSingleThreadExecutor();
 
-        galleryCheckRunnable = () -> executorService.execute(this::checkGalleryForNewImages);
+        // ✅ Register ContentObserver to detect image changes
+        imageObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+            @Override
+            public void onChange(boolean selfChange, @Nullable Uri uri) {
+                super.onChange(selfChange, uri);
+                Log.d(TAG, "📸 MediaStore content change detected: " + uri);
+                executorService.execute(() -> checkGalleryForNewImages());
+            }
+        };
 
-        // ✅ Run the first check immediately, then every 5s
-        handler.post(galleryCheckRunnable);
+        getContentResolver().registerContentObserver(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                true,
+                imageObserver
+        );
     }
 
     private Notification createNotification() {
@@ -116,33 +130,53 @@ public class GalleryMonitorService extends Service {
         notificationManager.notify((int) System.currentTimeMillis(), builder.build());
     }
 
-    private void checkGalleryForNewImages() {
-        Log.d(TAG, "Performing background gallery check");
-        try {
-            File dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
-            File cameraDir = new File(dcimDir, "Camera");
+    private void scanDirectoryForNewImages(File dir, Consumer<File> callback) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
 
-            if (cameraDir.exists()) {
-                File[] files = cameraDir.listFiles();
-                if (files != null && files.length > 0) {
-                    Arrays.sort(files, (f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
-                    File latestImage = files[0];
-
-                    if (latestImage.getName().toLowerCase().matches(".*\\.(jpg|jpeg|png)$")) {
-                        long modifiedTime = latestImage.lastModified();
-                        if (modifiedTime > lastCheckedTime) {
-                            Log.d(TAG, "🆕 New image detected: " + latestImage.getAbsolutePath());
-                            showNewImageNotification(latestImage.getAbsolutePath());
-                            lastCheckedTime = modifiedTime;
-                        }
-                    }
+        for (File file : files) {
+            if (file.isDirectory()) {
+                scanDirectoryForNewImages(file, callback); // recurse
+            } else if (file.getName().toLowerCase().matches(".*\\.(jpg|jpeg|png)$")) {
+                if (file.lastModified() > lastCheckedTime) {
+                    callback.accept(file);
                 }
             }
+        }
+    }
+
+    private void checkGalleryForNewImages() {
+        Log.d(TAG, "Checking for new images...");
+
+        List<File> imageDirs = Arrays.asList(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        );
+
+        try {
+            final File[] latestImage = {null};
+            final long[] latestModified = {lastCheckedTime};
+
+            for (File dir : imageDirs) {
+                if (dir != null && dir.exists()) {
+                    scanDirectoryForNewImages(dir, imageFile -> {
+                        if (imageFile != null && imageFile.lastModified() > latestModified[0]) {
+                            latestImage[0] = imageFile;
+                            latestModified[0] = imageFile.lastModified();
+                        }
+                    });
+                }
+            }
+
+            if (latestImage[0] != null) {
+                Log.d(TAG, "🆕 New image detected: " + latestImage[0].getAbsolutePath());
+                showNewImageNotification(latestImage[0].getAbsolutePath());
+                lastCheckedTime = latestModified[0];
+            }
+
         } catch (Exception e) {
             Log.e(TAG, "Error checking gallery", e);
-        } finally {
-            // ✅ Schedule next check
-            handler.postDelayed(galleryCheckRunnable, 5000);
         }
     }
 
@@ -150,9 +184,11 @@ public class GalleryMonitorService extends Service {
     public void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "Service destroyed");
-        if (handler != null && galleryCheckRunnable != null) {
-            handler.removeCallbacks(galleryCheckRunnable);
+
+        if (imageObserver != null) {
+            getContentResolver().unregisterContentObserver(imageObserver);
         }
+
         if (executorService != null) {
             executorService.shutdown();
         }
