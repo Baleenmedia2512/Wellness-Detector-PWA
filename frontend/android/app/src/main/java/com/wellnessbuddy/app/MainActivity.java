@@ -12,7 +12,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
+
+        // Request runtime permissions
+        requestAllPermissions();
+
         // Request battery optimization exemption
         requestBatteryOptimizationExemption();
 
@@ -34,6 +37,26 @@ public class MainActivity extends BridgeActivity {
                 intent.setData(Uri.parse("package:" + getPackageName()));
                 startActivity(intent);
             }
+        }
+    }
+
+    // Request Media, Notification, and Camera permissions
+    private void requestAllPermissions() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            String[] permissions;
+            if (android.os.Build.VERSION.SDK_INT >= 33) { // Android 13+
+                permissions = new String[] {
+                    android.Manifest.permission.READ_MEDIA_IMAGES,
+                    android.Manifest.permission.CAMERA,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                };
+            } else {
+                permissions = new String[] {
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.CAMERA
+                };
+            }
+            requestPermissions(permissions, 1001);
         }
     }
 
