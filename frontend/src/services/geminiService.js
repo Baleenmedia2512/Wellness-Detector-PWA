@@ -431,3 +431,22 @@ Use USDA values. Return valid JSON only, no markdown.`;
 }
 
 export const geminiService = new GeminiService();
+
+export async function analyzeImageFromPlugin({ imagePath }) {
+  try {
+    // Load image as File object
+    const response = await fetch(imagePath);
+    const blob = await response.blob();
+    const file = new File([blob], imagePath.split('/').pop(), { type: blob.type });
+    const gemini = new GeminiService();
+    const result = await gemini.analyzeImageForNutrition(file);
+    // Send result back to plugin (native)
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.FoodImageAnalysis) {
+      window.Capacitor.Plugins.FoodImageAnalysis.notifyAnalysisResult({ imagePath, result });
+    }
+    return result;
+  } catch (err) {
+    console.error('Error analyzing image from plugin:', err);
+    return null;
+  }
+}

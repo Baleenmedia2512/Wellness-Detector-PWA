@@ -22,13 +22,25 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
 import com.wellnessbuddy.app.MainActivity;
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKey;
+import android.content.SharedPreferences;
 
 import java.io.File;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import org.tensorflow.lite.Interpreter;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import org.json.JSONObject;
+import org.json.JSONArray;
 
 public class GalleryMonitorService extends Service {
     private static final String TAG = "GalleryMonitorService";
@@ -38,6 +50,12 @@ public class GalleryMonitorService extends Service {
     private ExecutorService executorService;
     private ContentObserver imageObserver;
     private long lastCheckedTime = 0;
+    private FoodImageQueue foodImageQueue;
+    private NetworkChangeReceiver networkChangeReceiver;
+    private GeminiApiClient geminiApiClient;
+    // Secure Gemini API key storage
+    private static final String SECURE_PREFS_NAME = "secure_prefs";
+    private static final String GEMINI_API_KEY_PREF = "gemini_api_key";
 
     @Override
     public void onCreate() {
@@ -62,6 +80,31 @@ public class GalleryMonitorService extends Service {
         Toast.makeText(this, "GalleryMonitorService Running", Toast.LENGTH_SHORT).show();
 
         executorService = Executors.newSingleThreadExecutor();
+        foodImageQueue = new FoodImageQueue(this);
+        networkChangeReceiver = new NetworkChangeReceiver(() -> processQueuedImages());
+        registerReceiver(networkChangeReceiver, new android.content.IntentFilter(android.net.ConnectivityManager.CONNECTIVITY_ACTION));
+        // Initialize secure key storage
+        try {
+            MasterKey masterKey = new MasterKey.Builder(this)
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build();
+            SharedPreferences securePrefs = EncryptedSharedPreferences.create(
+                    this,
+                    SECURE_PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            );
+            // If key not set, set it once (replace with your actual key)
+            if (!securePrefs.contains(GEMINI_API_KEY_PREF)) {
+                securePrefs.edit().putString(GEMINI_API_KEY_PREF, "AIzaSyAdlp8IINd-djyhXbz6FYBTnv0NZN0jFUA").apply();
+            }
+            String apiKey = securePrefs.getString(GEMINI_API_KEY_PREF, null);
+            geminiApiClient = new GeminiApiClient(apiKey);
+        } catch (Exception e) {
+            Log.e(TAG, "Error initializing secure Gemini API key storage", e);
+            geminiApiClient = new GeminiApiClient(""); // fallback, will fail
+        }
 
         // ✅ Register ContentObserver to detect image changes
         imageObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
@@ -171,7 +214,9 @@ public class GalleryMonitorService extends Service {
 
             if (latestImage[0] != null) {
                 Log.d(TAG, "🆕 New image detected: " + latestImage[0].getAbsolutePath());
-                showNewImageNotification(latestImage[0].getAbsolutePath());
+                if (isFoodImage(latestImage[0])) {
+                    handleFoodImage(latestImage[0].getAbsolutePath());
+                }
                 lastCheckedTime = latestModified[0];
             }
 
@@ -179,6 +224,46 @@ public class GalleryMonitorService extends Service {
             Log.e(TAG, "Error checking gallery", e);
         }
     }
+
+    // Always send images to Gemini API for food detection
+    private boolean isFoodImage(File imageFile) {
+        return true;
+    }
+
+    private void handleFoodImage(String imagePath) {
+        foodImageQueue.add(imagePath);
+        showNewImageNotification(imagePath);
+        Log.d(TAG, "Image queued for analysis: " + imagePath);
+        // Try to process immediately if network is available
+        if (isNetworkAvailable()) {
+            executorService.execute(this::processQueuedImages);
+        }
+    }
+
+    private boolean isNetworkAvailable() {
+        android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        android.net.NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+        return activeNetwork != null && activeNetwork.isConnected();
+    }
+
+    // No longer needed: JS will poll for queued images
+    private void processQueuedImages() {
+        Log.d(TAG, "Processing queued images for Gemini analysis...");
+        if (!isNetworkAvailable()) {
+            Log.d(TAG, "Network unavailable, skipping analysis.");
+            return;
+        }
+        java.util.Set<String> queueSet = foodImageQueue.getQueue();
+        java.util.List<String> queue = new java.util.ArrayList<>(queueSet);
+        for (String imagePath : queue) {
+            Log.d(TAG, "Analyzing image: " + imagePath);
+            String result = geminiApiClient.analyzeImage(imagePath);
+            showAnalysisNotification(imagePath, result);
+            foodImageQueue.remove(imagePath);
+        }
+    }
+
+    // Removed: JS will poll for queued images
 
     @Override
     public void onDestroy() {
@@ -192,11 +277,61 @@ public class GalleryMonitorService extends Service {
         if (executorService != null) {
             executorService.shutdown();
         }
+        if (networkChangeReceiver != null) {
+            unregisterReceiver(networkChangeReceiver);
+        }
     }
 
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    // Show Gemini analysis result notification
+    private void showAnalysisNotification(String imagePath, String result) {
+        String foodName = "Food";
+        int calories = -1;
+        try {
+            JSONObject obj = new JSONObject(result);
+            JSONArray foods = obj.optJSONArray("foods");
+            if (foods != null && foods.length() > 0) {
+                JSONObject firstFood = foods.getJSONObject(0);
+                foodName = firstFood.optString("name", foodName);
+                JSONObject nutrition = firstFood.optJSONObject("nutrition");
+                if (nutrition != null) {
+                    calories = nutrition.optInt("calories", -1);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error parsing Gemini result for notification", e);
+        }
+
+        String contentText = calories >= 0 ? (foodName + " • " + calories + " kcal") : foodName;
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_menu_camera)
+                .setContentTitle("🍽️ Food Analysis Complete")
+                .setContentText(contentText)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true);
+
+        // Try to show the image in the notification
+        try {
+            File imgFile = new File(imagePath);
+            if (imgFile.exists()) {
+                Bitmap bitmap = BitmapFactory.decodeFile(imgFile.getAbsolutePath());
+                if (bitmap != null) {
+                    builder.setStyle(new NotificationCompat.BigPictureStyle()
+                            .bigPicture(bitmap)
+                            .setSummaryText(contentText));
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error loading image for notification", e);
+        }
+
+        NotificationManager notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        notificationManager.notify((int) System.currentTimeMillis(), builder.build());
     }
 }

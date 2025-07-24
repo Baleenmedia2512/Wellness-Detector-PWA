@@ -54,6 +54,16 @@ dependencies {
     
     // Updated desugaring for Java 17
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+
+    // TensorFlow Lite dependencies for food image classification
+    implementation 'org.tensorflow:tensorflow-lite:2.13.0'
+    implementation 'org.tensorflow:tensorflow-lite-support:0.4.3'
+
+    // OkHttp for Gemini API client
+    implementation 'com.squareup.okhttp3:okhttp:4.10.0'
+
+    // AndroidX Security Crypto for EncryptedSharedPreferences
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
 }
 
 apply from: 'capacitor.build.gradle'
