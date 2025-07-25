@@ -1,4 +1,5 @@
 package com.wellnessbuddy.app.services;
+import com.wellnessbuddy.app.R;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -136,7 +137,7 @@ public class GalleryMonitorService extends Service {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Gallery Monitor Active")
                 .setContentText("Wellness Buddy is monitoring new food photos.")
-                .setSmallIcon(android.R.drawable.ic_menu_camera)
+                .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -159,18 +160,6 @@ public class GalleryMonitorService extends Service {
                 manager.createNotificationChannel(channel);
             }
         }
-    }
-
-    private void showNewImageNotification(String imagePath) {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_menu_camera)
-                .setContentTitle("📸 New Image Detected")
-                .setContentText("Detected: " + new File(imagePath).getName())
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true);
-
-        NotificationManager notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        notificationManager.notify((int) System.currentTimeMillis(), builder.build());
     }
 
     private void scanDirectoryForNewImages(File dir, Consumer<File> callback) {
@@ -232,7 +221,6 @@ public class GalleryMonitorService extends Service {
 
     private void handleFoodImage(String imagePath) {
         foodImageQueue.add(imagePath);
-        showNewImageNotification(imagePath);
         Log.d(TAG, "Image queued for analysis: " + imagePath);
         // Try to process immediately if network is available
         if (isNetworkAvailable()) {
@@ -281,6 +269,27 @@ public class GalleryMonitorService extends Service {
             unregisterReceiver(networkChangeReceiver);
         }
     }
+    
+    // Auto-restart service if killed (swipe away or system kill)
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Log.d(TAG, "onTaskRemoved called, restarting service...");
+        Intent restartServiceIntent = new Intent(getApplicationContext(), GalleryMonitorService.class);
+        restartServiceIntent.setPackage(getPackageName());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getApplicationContext().startForegroundService(restartServiceIntent);
+        } else {
+            getApplicationContext().startService(restartServiceIntent);
+        }
+    }
+    
+    // Ensure service is restarted if killed by system
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "onStartCommand called");
+        return START_STICKY;
+    }
 
     @Nullable
     @Override
@@ -292,25 +301,44 @@ public class GalleryMonitorService extends Service {
     private void showAnalysisNotification(String imagePath, String result) {
         String foodName = "Food";
         int calories = -1;
+        double protein = -1, carbs = -1, fat = -1, fiber = -1;
+        boolean hasFood = false;
         try {
             JSONObject obj = new JSONObject(result);
             JSONArray foods = obj.optJSONArray("foods");
             if (foods != null && foods.length() > 0) {
+                hasFood = true;
                 JSONObject firstFood = foods.getJSONObject(0);
                 foodName = firstFood.optString("name", foodName);
                 JSONObject nutrition = firstFood.optJSONObject("nutrition");
                 if (nutrition != null) {
                     calories = nutrition.optInt("calories", -1);
+                    protein = nutrition.optDouble("protein", -1);
+                    carbs = nutrition.optDouble("carbs", -1);
+                    fat = nutrition.optDouble("fat", -1);
+                    fiber = nutrition.optDouble("fiber", -1);
                 }
             }
         } catch (Exception e) {
             Log.e(TAG, "Error parsing Gemini result for notification", e);
         }
 
-        String contentText = calories >= 0 ? (foodName + " • " + calories + " kcal") : foodName;
+        if (!hasFood) {
+            Log.d(TAG, "No food detected by Gemini. Skipping notification.");
+            return;
+        }
+
+        StringBuilder contentTextBuilder = new StringBuilder();
+        contentTextBuilder.append(foodName);
+        if (calories >= 0) contentTextBuilder.append(" • ").append(calories).append(" kcal");
+        if (protein >= 0) contentTextBuilder.append(" • Protein: ").append(protein).append("g");
+        if (carbs >= 0) contentTextBuilder.append(" • Carbs: ").append(carbs).append("g");
+        if (fat >= 0) contentTextBuilder.append(" • Fat: ").append(fat).append("g");
+        if (fiber >= 0) contentTextBuilder.append(" • Fiber: ").append(fiber).append("g");
+        String contentText = contentTextBuilder.toString();
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_menu_camera)
+                .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("🍽️ Food Analysis Complete")
                 .setContentText(contentText)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)

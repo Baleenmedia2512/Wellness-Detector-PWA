@@ -4,6 +4,11 @@ const config = {
   webDir: 'build',
   bundledWebRuntime: false,
   plugins: {
+    StatusBar: {
+      style: 'DARK',
+      backgroundColor: '#e6f4ea',
+      overlaysWebView: false
+    },
     SocialLogin: {
       providers: {
         google: {

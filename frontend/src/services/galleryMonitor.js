@@ -1,7 +1,6 @@
-import { Plugins, Capacitor } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import GalleryMonitorPlugin from '../plugins/galleryMonitorPlugin';
-
-const { App, Modals, BackgroundTask, LocalNotifications } = Plugins;
 
 export const GalleryMonitor = {
   async initialize() {
@@ -25,10 +24,8 @@ export const GalleryMonitor = {
       const permissionResult = await GalleryMonitorPlugin.requestPermissions();
       
       if (!permissionResult.granted) {
-        await Modals.alert({
-          title: 'Permission Needed',
-          message: 'Please grant storage access to monitor your food photos'
-        });
+        // Use browser alert for now, or implement custom modal
+        alert('Permission Needed: Please grant storage access to monitor your food photos');
         return false;
       }
 
@@ -56,11 +53,12 @@ export const GalleryMonitor = {
 
   async startMonitoring() {
     try {
-      // Register background task
-      const taskId = await BackgroundTask.beforeExit(async () => {
-        console.log('App going to background, checking gallery...');
-        await this.checkGallery();
-        BackgroundTask.finish({ taskId });
+      // Register app state change listener for background handling
+      App.addListener('appStateChange', async (state) => {
+        if (!state.isActive) {
+          console.log('App going to background, checking gallery...');
+          await this.checkGallery();
+        }
       });
 
       // Start native service
@@ -94,15 +92,11 @@ export const GalleryMonitor = {
 
   async processNewImages(images) {
     try {
-      // Show notification to user
-      await LocalNotifications.schedule({
-        notifications: [{
-          title: 'New Food Photos Detected',
-          body: `Found ${images.length} new food photos to analyze`,
-          id: 1,
-          schedule: { at: new Date(Date.now() + 1000) }
-        }]
-      });
+      // Log notification to console for now
+      console.log(`New Food Photos Detected: Found ${images.length} new food photos to analyze`);
+      
+      // You could implement a custom notification system here
+      // or install @capacitor/local-notifications package
       
       // Process each image
       for (const image of images) {
@@ -119,7 +113,7 @@ export const GalleryMonitor = {
     console.log('Analyzing image:', image.path);
     
     // Example: Use your Gemini service
-    const { GeminiService } = await import('./gemini-service');
+    const { GeminiService } = await import('./geminiService');
     return await GeminiService.analyzeFoodImage(image);
   },
 

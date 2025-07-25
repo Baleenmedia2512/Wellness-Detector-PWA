@@ -21,8 +21,7 @@ import {
 import Header from './components/Header';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
-import GalleryMonitor from './services/gallery-monitor';
-import { PermissionsAndroid } from '@capacitor/android';
+import GalleryMonitor from './services/galleryMonitor';
 import { PushNotifications } from '@capacitor/push-notifications';
 
 
@@ -46,17 +45,13 @@ function WellnessBuddyApp() {
   if (!Capacitor.isNativePlatform()) return;
 
   try {
-    // Camera permission
-    await PermissionsAndroid.requestPermission({
-      permission: 'android.permission.CAMERA',
-    });
-
-    // Storage or media access
-    await PermissionsAndroid.requestPermission({
-      permission: 'android.permission.READ_MEDIA_IMAGES',
-    });
-
-    // Notifications permission (only on Android 13+)
+    // Camera permission is handled by the camera plugin when used
+    // No need to request it explicitly here
+    
+    // Storage/media access is handled by gallery monitor
+    // when it initializes
+    
+    // Notifications permission (Capacitor way)
     await PushNotifications.requestPermissions();
 
     console.log('✅ Permissions requested');
@@ -65,8 +60,21 @@ function WellnessBuddyApp() {
   }
 };
 
+  
+  // Set up StatusBar to appear above content (not overlaid)
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      import('@capacitor/status-bar').then(({ StatusBar }) => {
+        // Simple configuration - rely on native configuration
+        StatusBar.setOverlaysWebView({ overlay: false });
+        console.log('✅ Status bar configured with overlay: false');
+      }).catch((err) => {
+        console.warn('StatusBar plugin not available:', err);
+      });
+    }
+  }, []);
 
-    useEffect(() => {
+  useEffect(() => {
     const initializeGalleryMonitoring = async () => {
       if (Capacitor.isNativePlatform()) {
         // Start the gallery monitoring service
@@ -379,7 +387,7 @@ function WellnessBuddyApp() {
 
   // Main app interface
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
+    <div className="min-h-screen h-screen w-screen bg-gradient-to-br from-green-50 to-green-100">
       <Header
         user={user}
         onTestCamera={() => setShowCameraTest(true)}
