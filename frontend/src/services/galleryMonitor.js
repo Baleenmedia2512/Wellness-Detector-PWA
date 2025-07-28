@@ -18,6 +18,47 @@ export const GalleryMonitor = {
     return this.startMonitoring();
   },
 
+  async setCurrentUser(userId, userEmail = null) {
+    try {
+      if (Capacitor.getPlatform() === 'android') {
+        await GalleryMonitorPlugin.setCurrentUser({ 
+          userId, 
+          userEmail: userEmail || userId // Use email if provided, otherwise fall back to userId
+        });
+        console.log('✅ Current user set for background service:', { userId, userEmail });
+      }
+    } catch (error) {
+      console.error('Failed to set current user for background service:', error);
+    }
+  },
+
+  async getCurrentUser() {
+    try {
+      if (Capacitor.getPlatform() === 'android') {
+        const result = await GalleryMonitorPlugin.getCurrentUser();
+        return {
+          userId: result.userId,
+          userEmail: result.userEmail
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to get current user from background service:', error);
+      return null;
+    }
+  },
+
+  async clearCurrentUser() {
+    try {
+      if (Capacitor.getPlatform() === 'android') {
+        await GalleryMonitorPlugin.clearCurrentUser();
+        console.log('✅ Current user cleared from background service');
+      }
+    } catch (error) {
+      console.error('Failed to clear current user from background service:', error);
+    }
+  },
+
   async requestPermissions() {
     try {
       // Request storage permission
@@ -95,32 +136,84 @@ export const GalleryMonitor = {
       // Log notification to console for now
       console.log(`New Food Photos Detected: Found ${images.length} new food photos to analyze`);
       
+      // Note: The actual analysis and database saving now happens in the Android background service
+      // This JavaScript method is mainly for logging and potential UI notifications
+      
       // You could implement a custom notification system here
       // or install @capacitor/local-notifications package
       
-      // Process each image
-      for (const image of images) {
-        const analysis = await this.analyzeImage(image);
-        await this.saveAnalysis(analysis);
-      }
+      // The background service handles:
+      // 1. Image analysis via Gemini API
+      // 2. Saving results to MariaDB database
+      // 3. Showing Android notifications
+      // 4. Retry logic for failed operations
+      
+      console.log('✅ Background service will handle analysis and database saving');
+      
     } catch (error) {
       console.error('Image processing failed:', error);
     }
   },
 
   async analyzeImage(image) {
-    // Implement your image analysis logic here
-    console.log('Analyzing image:', image.path);
+    // Note: This method is now primarily handled by the Android background service
+    // The service directly calls Gemini API and saves to database
+    console.log('Analyzing image in background service:', image.path);
     
-    // Example: Use your Gemini service
-    const { GeminiService } = await import('./geminiService');
-    return await GeminiService.analyzeFoodImage(image);
+    // If you need to analyze from JavaScript for UI purposes, keep this:
+    try {
+      const { GeminiService } = await import('./geminiService');
+      return await GeminiService.analyzeFoodImage(image);
+    } catch (error) {
+      console.error('JavaScript image analysis failed:', error);
+      return null;
+    }
   },
 
   async saveAnalysis(analysis) {
-    // Save to your database or local storage
-    console.log('Saving analysis:', analysis);
-    // Implement your save logic here
+    // Note: Database saving is now handled by the Android background service
+    // This method can be used for local storage or UI updates
+    console.log('Analysis will be saved by background service:', analysis);
+    
+    // Optional: Save to local storage for UI purposes
+    try {
+      const savedAnalyses = JSON.parse(localStorage.getItem('backgroundAnalyses') || '[]');
+      savedAnalyses.unshift({
+        ...analysis,
+        timestamp: Date.now(),
+        source: 'background_service'
+      });
+      
+      // Keep only last 50 analyses in local storage
+      if (savedAnalyses.length > 50) {
+        savedAnalyses.splice(50);
+      }
+      
+      localStorage.setItem('backgroundAnalyses', JSON.stringify(savedAnalyses));
+      console.log('✅ Analysis cached locally for UI');
+    } catch (error) {
+      console.error('Failed to cache analysis locally:', error);
+    }
+  },
+
+  // New method to get background analyses from local storage
+  getLocalBackgroundAnalyses() {
+    try {
+      return JSON.parse(localStorage.getItem('backgroundAnalyses') || '[]');
+    } catch (error) {
+      console.error('Failed to get local background analyses:', error);
+      return [];
+    }
+  },
+
+  // New method to clear local background analyses
+  clearLocalBackgroundAnalyses() {
+    try {
+      localStorage.removeItem('backgroundAnalyses');
+      console.log('✅ Local background analyses cleared');
+    } catch (error) {
+      console.error('Failed to clear local background analyses:', error);
+    }
   }
 };
 

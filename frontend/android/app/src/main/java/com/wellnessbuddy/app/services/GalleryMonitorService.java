@@ -39,6 +39,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -49,14 +51,23 @@ public class GalleryMonitorService extends Service {
     private static final int NOTIFICATION_ID = 101;
 
     private ExecutorService executorService;
+    private ScheduledExecutorService scheduledExecutor;
     private ContentObserver imageObserver;
     private long lastCheckedTime = 0;
     private FoodImageQueue foodImageQueue;
     private NetworkChangeReceiver networkChangeReceiver;
     private GeminiApiClient geminiApiClient;
+    private DatabaseSyncClient databaseSyncClient;
+    private RetryQueue retryQueue;
+    
     // Secure Gemini API key storage
     private static final String SECURE_PREFS_NAME = "secure_prefs";
     private static final String GEMINI_API_KEY_PREF = "gemini_api_key";
+    
+    // Database API configuration
+    private static final String API_BASE_URL = "http://10.0.2.2:3000"; // For Android emulator (localhost:3000)
+    // private static final String API_BASE_URL = "http://192.168.1.100:3000"; // For physical device (replace with your PC IP)
+    // private static final String API_BASE_URL = "https://your-production-url.com"; // For production
 
     @Override
     public void onCreate() {
@@ -81,9 +92,20 @@ public class GalleryMonitorService extends Service {
         Toast.makeText(this, "GalleryMonitorService Running", Toast.LENGTH_SHORT).show();
 
         executorService = Executors.newSingleThreadExecutor();
+        scheduledExecutor = Executors.newScheduledThreadPool(2);
         foodImageQueue = new FoodImageQueue(this);
         networkChangeReceiver = new NetworkChangeReceiver(() -> processQueuedImages());
         registerReceiver(networkChangeReceiver, new android.content.IntentFilter(android.net.ConnectivityManager.CONNECTIVITY_ACTION));
+        
+        // Initialize database sync client
+        databaseSyncClient = new DatabaseSyncClient(API_BASE_URL, this);
+        
+        // Test database connection
+        executorService.execute(() -> {
+            boolean connected = databaseSyncClient.testConnection();
+            Log.d(TAG, connected ? "✅ Database connection successful" : "❌ Database connection failed");
+        });
+        
         // Initialize secure key storage
         try {
             MasterKey masterKey = new MasterKey.Builder(this)
@@ -102,6 +124,16 @@ public class GalleryMonitorService extends Service {
             }
             String apiKey = securePrefs.getString(GEMINI_API_KEY_PREF, null);
             geminiApiClient = new GeminiApiClient(apiKey);
+            
+            // Initialize retry queue
+            retryQueue = new RetryQueue(this, databaseSyncClient);
+            
+            // Schedule retry processing every 30 minutes
+            scheduledExecutor.scheduleAtFixedRate(() -> {
+                Log.d(TAG, "Processing retry queue: " + retryQueue.getQueueStats());
+                retryQueue.processRetries();
+            }, 30, 30, TimeUnit.MINUTES);
+            
         } catch (Exception e) {
             Log.e(TAG, "Error initializing secure Gemini API key storage", e);
             geminiApiClient = new GeminiApiClient(""); // fallback, will fail
@@ -241,14 +273,101 @@ public class GalleryMonitorService extends Service {
             Log.d(TAG, "Network unavailable, skipping analysis.");
             return;
         }
+        
         java.util.Set<String> queueSet = foodImageQueue.getQueue();
         java.util.List<String> queue = new java.util.ArrayList<>(queueSet);
+        
         for (String imagePath : queue) {
             Log.d(TAG, "Analyzing image: " + imagePath);
             String result = geminiApiClient.analyzeImage(imagePath);
+            
+            // 🆕 Save to MariaDB database in background thread
+            final String currentUserId = getCurrentUserId();
+            executorService.execute(() -> {
+                boolean saved = databaseSyncClient.saveAnalysis(
+                    currentUserId,                    // User ID from SharedPreferences
+                    imagePath,                        // Full image path
+                    result,                           // Gemini JSON response
+                    System.currentTimeMillis()        // Timestamp
+                );
+                
+                if (saved) {
+                    Log.d(TAG, "✅ Analysis saved to MariaDB successfully for user: " + currentUserId);
+                } else {
+                    Log.w(TAG, "❌ Failed to save to MariaDB, adding to retry queue");
+                    retryQueue.add(currentUserId, imagePath, result, System.currentTimeMillis());
+                }
+            });
+            
             showAnalysisNotification(imagePath, result);
             foodImageQueue.remove(imagePath);
         }
+    }
+    
+    // Get current user ID from SharedPreferences and lookup database UserId
+    private String getCurrentUserId() {
+        android.content.SharedPreferences prefs = getSharedPreferences("WellnessBuddy", MODE_PRIVATE);
+        String firebaseInfo = prefs.getString("current_user_id", null);
+        String userEmail = prefs.getString("current_user_email", null);
+        
+        // Log all stored preferences for debugging
+        Log.d(TAG, "🔍 SharedPreferences Debug:");
+        Log.d(TAG, "  - current_user_id: " + firebaseInfo);
+        Log.d(TAG, "  - current_user_email: " + userEmail);
+        
+        // First check if we have a cached database UserId
+        String cachedDbUserId = prefs.getString("cached_db_user_id", null);
+        Log.d(TAG, "  - cached_db_user_id: " + cachedDbUserId);
+        
+        if (cachedDbUserId != null && !cachedDbUserId.isEmpty()) {
+            Log.d(TAG, "✅ Using cached database UserId: " + cachedDbUserId);
+            return cachedDbUserId;
+        }
+        
+        // For OTP users, firebaseInfo might already be the database UserId
+        // Check if firebaseInfo is numeric (database UserId) vs alphanumeric (Firebase UID)
+        if (firebaseInfo != null && firebaseInfo.matches("\\d+")) {
+            Log.d(TAG, "✅ Using OTP database UserId directly: " + firebaseInfo);
+            // Cache it for future use
+            prefs.edit().putString("cached_db_user_id", firebaseInfo).apply();
+            return firebaseInfo;
+        }
+        
+        // Try to get database UserId using email lookup (this will cache the result)
+        if (userEmail != null && !userEmail.isEmpty()) {
+            Log.d(TAG, "🔍 Attempting database lookup for email: " + userEmail);
+            String dbUserId = databaseSyncClient.lookupDatabaseUserId(userEmail, firebaseInfo);
+            if (dbUserId != null) {
+                Log.d(TAG, "✅ Using database UserId from lookup: " + dbUserId + " for email: " + userEmail);
+                return dbUserId;
+            } else {
+                Log.w(TAG, "❌ Database UserId lookup failed for email: " + userEmail);
+            }
+        }
+        
+        // ** TEMPORARY TESTING: Use known test user **
+        // TODO: Remove this after proper login is implemented
+        Log.w(TAG, "⚠️ No valid user found in SharedPreferences, using test user");
+        String testEmail = "logeshwaran67677@gmail.com";
+        String testDbUserId = databaseSyncClient.lookupDatabaseUserId(testEmail, null);
+        if (testDbUserId != null) {
+            Log.d(TAG, "✅ Using test database UserId: " + testDbUserId + " for email: " + testEmail);
+            // Cache it for future use
+            prefs.edit().putString("cached_db_user_id", testDbUserId).apply();
+            prefs.edit().putString("current_user_email", testEmail).apply();
+            return testDbUserId;
+        }
+        
+        // Fallback to original logic if database lookup fails
+        if (firebaseInfo == null || firebaseInfo.equals("anonymous")) {
+            // Try to get from other sources or generate a device-specific ID
+            String deviceId = android.provider.Settings.Secure.getString(getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+            Log.w(TAG, "No user ID found, using device ID: " + deviceId);
+            return deviceId;
+        }
+        
+        Log.w(TAG, "Using Firebase info as fallback: " + firebaseInfo);
+        return firebaseInfo;
     }
 
     // Removed: JS will poll for queued images
@@ -265,8 +384,16 @@ public class GalleryMonitorService extends Service {
         if (executorService != null) {
             executorService.shutdown();
         }
+        if (scheduledExecutor != null) {
+            scheduledExecutor.shutdown();
+        }
         if (networkChangeReceiver != null) {
             unregisterReceiver(networkChangeReceiver);
+        }
+        
+        // Log final retry queue stats
+        if (retryQueue != null) {
+            Log.d(TAG, "Service destroyed. Final retry queue stats: " + retryQueue.getQueueStats());
         }
     }
     

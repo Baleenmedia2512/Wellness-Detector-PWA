@@ -13,7 +13,9 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:local": "next dev --port 3000",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "start:local": "next start --port 3000"
   }
 }
