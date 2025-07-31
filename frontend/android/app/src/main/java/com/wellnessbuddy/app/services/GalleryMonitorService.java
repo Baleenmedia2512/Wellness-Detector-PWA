@@ -49,6 +49,9 @@ public class GalleryMonitorService extends Service {
     private static final String TAG = "GalleryMonitorService";
     private static final String CHANNEL_ID = "GalleryMonitorChannel";
     private static final int NOTIFICATION_ID = 101;
+    
+    // 🚨 DEBUG FEATURE: Set to false for live release to disable success notifications
+    private static final boolean SHOW_DEBUG_SUCCESS_NOTIFICATIONS = true;
 
     private ExecutorService executorService;
     private ScheduledExecutorService scheduledExecutor;
@@ -65,9 +68,9 @@ public class GalleryMonitorService extends Service {
     private static final String GEMINI_API_KEY_PREF = "gemini_api_key";
     
     // Database API configuration
-    private static final String API_BASE_URL = "http://10.0.2.2:3000"; // For Android emulator (localhost:3000)
+    // private static final String API_BASE_URL = "http://10.0.2.2:3000"; // For Android emulator (localhost:3000)
     // private static final String API_BASE_URL = "http://192.168.1.100:3000"; // For physical device (replace with your PC IP)
-    // private static final String API_BASE_URL = "https://your-production-url.com"; // For production
+    private static final String API_BASE_URL = "https://wellness-buddy-pwa-eta.vercel.app/"; // Replace with your actual Vercel URL
 
     @Override
     public void onCreate() {
@@ -183,13 +186,15 @@ public class GalleryMonitorService extends Service {
                     "Gallery Monitor",
                     NotificationManager.IMPORTANCE_DEFAULT
             );
-            channel.setDescription("Monitors for new food photos");
+            channel.setDescription("Monitors for new food photos and database saves");
             channel.enableLights(true);
             channel.enableVibration(true);
+            channel.setShowBadge(true);
 
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
+                Log.d(TAG, "✅ Notification channel created: " + CHANNEL_ID);
             }
         }
     }
@@ -293,6 +298,14 @@ public class GalleryMonitorService extends Service {
                 
                 if (saved) {
                     Log.d(TAG, "✅ Analysis saved to MariaDB successfully for user: " + currentUserId);
+                    
+                    // 🚨 DEBUG: Show success notification (removable for production)
+                    if (SHOW_DEBUG_SUCCESS_NOTIFICATIONS) {
+                        // Post notification on main thread to ensure it's shown
+                        new Handler(Looper.getMainLooper()).post(() -> {
+                            showDatabaseSuccessNotification(imagePath, currentUserId);
+                        });
+                    }
                 } else {
                     Log.w(TAG, "❌ Failed to save to MariaDB, adding to retry queue");
                     retryQueue.add(currentUserId, imagePath, result, System.currentTimeMillis());
@@ -488,5 +501,47 @@ public class GalleryMonitorService extends Service {
 
         NotificationManager notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         notificationManager.notify((int) System.currentTimeMillis(), builder.build());
+    }
+    
+    // 🚨 DEBUG: Show database save success notification (removable for production)
+    private void showDatabaseSuccessNotification(String imagePath, String userId) {
+        if (!SHOW_DEBUG_SUCCESS_NOTIFICATIONS) {
+            Log.d(TAG, "Debug notifications disabled, skipping success notification");
+            return;
+        }
+        
+        Log.d(TAG, "🔔 Creating database success notification for user: " + userId);
+        
+        String fileName = new File(imagePath).getName();
+        String shortText = "✅ Database save successful - " + fileName;
+        String longText = "Food analysis saved to database successfully\n" +
+                         "User ID: " + userId + "\n" +
+                         "File: " + fileName + "\n" +
+                         "Time: " + new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
+        
+        try {
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("🗄️ Database Save Complete")
+                    .setContentText(shortText)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(longText))
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Changed from LOW to DEFAULT for better visibility
+                    .setAutoCancel(true)
+                    .setShowWhen(true)
+                    .setWhen(System.currentTimeMillis());
+
+            // Remove setTimeoutAfter as it's not available on all API levels
+            
+            NotificationManager notificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (notificationManager != null) {
+                int notificationId = (int) (System.currentTimeMillis() % Integer.MAX_VALUE);
+                notificationManager.notify(notificationId, builder.build());
+                Log.d(TAG, "✅ Database success notification posted with ID: " + notificationId);
+            } else {
+                Log.e(TAG, "❌ NotificationManager is null, cannot show notification");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "❌ Error creating database success notification", e);
+        }
     }
 }
