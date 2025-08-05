@@ -1,5 +1,7 @@
 // src/components/Login.js
 import React, { useState, useRef, useEffect } from 'react';
+import TermsAndConditions from './TermsAndConditions';
+import PrivacyPolicy from './PrivacyPolicy';
 
 const Login = ({ onSignIn, loading, onOtpVerified, forceOtpVerification }) => {
   const apiBaseUrl = process.env.REACT_APP_API_BASE_URL;
@@ -14,6 +16,8 @@ const Login = ({ onSignIn, loading, onOtpVerified, forceOtpVerification }) => {
   const [otpVerified, setOtpVerified] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showTerms, setShowTerms] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   useEffect(() => {
     if (otpSent && countdown > 0) {
@@ -370,10 +374,33 @@ const Login = ({ onSignIn, loading, onOtpVerified, forceOtpVerification }) => {
           
           {/* Footer text */}
           <p className="mt-6 text-center text-xs text-gray-400">
-            By continuing, you agree to our <span className="text-green-500">Terms</span> and <span className="text-green-500">Privacy Policy</span>
+            By continuing, you agree to our{' '}
+            <button
+              onClick={() => setShowTerms(true)}
+              className="text-green-500 hover:text-green-600 underline transition-colors duration-200"
+            >
+              Terms
+            </button>{' '}
+            and{' '}
+            <button
+              onClick={() => setShowPrivacy(true)}
+              className="text-green-500 hover:text-green-600 underline transition-colors duration-200"
+            >
+              Privacy Policy
+            </button>
           </p>
         </div>
       </div>
+
+      {/* Terms and Conditions Modal */}
+      {showTerms && (
+        <TermsAndConditions onClose={() => setShowTerms(false)} />
+      )}
+
+      {/* Privacy Policy Modal */}
+      {showPrivacy && (
+        <PrivacyPolicy onClose={() => setShowPrivacy(false)} />
+      )}
       
       {/* Add animation styles */}
       <style jsx>{`
