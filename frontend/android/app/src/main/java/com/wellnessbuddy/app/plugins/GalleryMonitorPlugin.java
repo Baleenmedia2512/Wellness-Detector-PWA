@@ -20,6 +20,22 @@ import org.json.JSONArray;
 @CapacitorPlugin(name = "GalleryMonitor")
 public class GalleryMonitorPlugin extends Plugin {
     private static final String TAG = "GalleryMonitorPlugin";
+    private static GalleryMonitorPlugin instance = null;
+    
+    @Override
+    public void load() {
+        super.load();
+        instance = this;
+    }
+    
+    // Static method to trigger notification events from MainActivity
+    public static void triggerNotificationEvent(String action) {
+        if (instance != null) {
+            JSObject ret = new JSObject();
+            ret.put("action", action);
+            instance.notifyListeners("notificationClicked", ret);
+        }
+    }
     
     @PluginMethod
     public void startService(PluginCall call) {

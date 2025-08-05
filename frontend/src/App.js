@@ -6,6 +6,7 @@ import TestImageGuide from './components/TestImageGuide';
 import CameraTest from './components/CameraTest';
 import LoadingSpinner from './components/LoadingSpinner';
 import Login from './components/Login';
+import NutritionDashboard from './components/NutritionDashboard';
 import { geminiService } from './services/geminiService';
 import { cameraService } from './services/cameraService';
 import { 
@@ -34,6 +35,7 @@ function WellnessBuddyApp() {
   const [error, setError] = useState(null);
   const [showTestGuide, setShowTestGuide] = useState(false);
   const [showCameraTest, setShowCameraTest] = useState(false);
+  const [showNutritionDashboard, setShowNutritionDashboard] = useState(false);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isOtpVerified, setIsOtpVerified] = useState(
@@ -87,14 +89,32 @@ function WellnessBuddyApp() {
             GalleryMonitor.checkGallery();
           }
         });
+
+        // Listen for notification clicks that should open background history
+        const { GalleryMonitorPlugin } = await import('./plugins/galleryMonitorPlugin');
+        
+        const listener = await GalleryMonitorPlugin.addListener('notificationClicked', (data) => {
+          console.log('Notification clicked:', data);
+          if (data && data.action === 'openBackgroundHistory') {
+            setShowNutritionDashboard(true);
+          }
+        });
+
+        return () => {
+          listener.remove();
+        };
       }
     };
 
-    initializeGalleryMonitoring();
+    let cleanup;
+    initializeGalleryMonitoring().then((cleanupFn) => {
+      cleanup = cleanupFn;
+    });
 
     return () => {
       // Clean up listeners
       App.removeAllListeners();
+      if (cleanup) cleanup();
     };
   }, []);
 
@@ -403,16 +423,44 @@ function WellnessBuddyApp() {
     );
   }
 
+  // If showing nutrition dashboard, render it as a full page
+  if (showNutritionDashboard) {
+    return (
+      <NutritionDashboard
+        user={user}
+        onBack={() => setShowNutritionDashboard(false)}
+        apiBaseUrl={apiBaseUrl}
+      />
+    );
+  }
+
   // Main app interface
   return (
     <div className="min-h-screen h-screen w-screen bg-gradient-to-br from-green-50 to-green-100">
       <Header
         user={user}
         onTestCamera={() => setShowCameraTest(true)}
+        onShowBackgroundHistory={() => setShowNutritionDashboard(true)}
         onSignOut={handleSignOut}
       />
       
       <div className="max-w-md mx-auto px-4 py-6 space-y-6">
+        {/* Nutrition Dashboard Floating Button */}
+        {Capacitor.isNativePlatform() && (
+          <div className="fixed bottom-4 right-4 z-40">
+            <button
+              onClick={() => setShowNutritionDashboard(true)}
+              className="bg-green-500 hover:bg-green-600 text-white p-3 rounded-full shadow-lg transition-colors flex items-center space-x-2"
+              title="View Nutrition Dashboard"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <span className="text-xs font-medium">Stats</span>
+            </button>
+          </div>
+        )}
+
         <ImageUpload
           onImageSelect={handleImageSelect}
           imagePreview={imagePreview}

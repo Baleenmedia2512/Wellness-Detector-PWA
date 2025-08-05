@@ -49,6 +49,28 @@ public class MainActivity extends BridgeActivity {
         
         // Register the GalleryMonitorPlugin
         registerPlugin(GalleryMonitorPlugin.class);
+        
+        // Check if app was opened from notification
+        handleNotificationIntent(getIntent());
+    }
+    
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleNotificationIntent(intent);
+    }
+    
+    private void handleNotificationIntent(Intent intent) {
+        if (intent != null && intent.getBooleanExtra("openBackgroundHistory", false)) {
+            // Send event to JavaScript side after a short delay to ensure the app is ready
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                try {
+                    GalleryMonitorPlugin.triggerNotificationEvent("openBackgroundHistory");
+                } catch (Exception e) {
+                    android.util.Log.e("MainActivity", "Failed to trigger notification event", e);
+                }
+            }, 1000);
+        }
     }
     
     private void requestBatteryOptimizationExemption() {

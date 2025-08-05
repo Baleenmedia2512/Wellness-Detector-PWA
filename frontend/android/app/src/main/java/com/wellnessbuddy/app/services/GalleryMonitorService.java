@@ -484,6 +484,22 @@ public class GalleryMonitorService extends Service {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true);
 
+        // Make notification clickable - opens app with background history flag
+        Intent notificationIntent = new Intent(this, MainActivity.class);
+        notificationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        notificationIntent.putExtra("openBackgroundHistory", true);
+        
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this, 
+                (int) System.currentTimeMillis(), 
+                notificationIntent,
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                        ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+                        : PendingIntent.FLAG_UPDATE_CURRENT
+        );
+        
+        builder.setContentIntent(pendingIntent);
+
         // Try to show the image in the notification
         try {
             File imgFile = new File(imagePath);
