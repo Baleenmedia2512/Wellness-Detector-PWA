@@ -12,10 +12,14 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <meta-data android:name="com.google.android.gms.client_id" android:value="@string/server_client_id" />
-
-        <!-- Add this meta-data for Firebase -->
-        <meta-data android:name="com.google.firebase.auth.USE_EMULATOR" android:value="false" />
+        
+        <!-- Google Services Configuration -->
+        <meta-data android:name="com.google.android.gms.client_id" 
+                   android:value="@string/server_client_id" />
+        
+        <!-- Firebase Configuration -->
+        <meta-data android:name="com.google.firebase.auth.USE_EMULATOR" 
+                   android:value="false" />
 
         <activity
             android:configChanges="orientation|keyboardHidden|screenSize"
