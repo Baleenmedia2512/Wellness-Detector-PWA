@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "610941252952-glm3ubnme6bs3cithddg0b6vnq8sojq3.apps.googleusercontent.com",
+          "client_id": "610941252952-m9hukk2fkn8e3p4kf8kq12gcm2iv4qoh.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.wellnessbuddy.app",
-            "certificate_hash": "2bebbbf435e9301b34cbb85d32041e5f32f69077"
+            "certificate_hash": "28d018a391cb5ea3f6134da460dcbd285b6503e5"
           }
         },
         {

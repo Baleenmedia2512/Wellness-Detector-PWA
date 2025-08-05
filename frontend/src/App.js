@@ -16,6 +16,7 @@ import {
   onAuthStateChange,
   isGoogleUser,
   isMobileDevice,
+  isNativePlatform,
   cleanup
 } from './services/firebase';
 import Header from './components/Header';

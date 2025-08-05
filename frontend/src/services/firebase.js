@@ -9,12 +9,9 @@ import {
   onAuthStateChanged
 } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
+import { GoogleAuth } from '@southdevs/capacitor-google-auth';
 
-// 🔐 Correct Google OAuth Client IDs
-const WEB_CLIENT_ID = '610941252952-u9h8srgfr879aucl4sbc8h3f6i68cq7n.apps.googleusercontent.com';
-const ANDROID_CLIENT_ID = '610941252952-glm3ubnme6bs3cithddg0b6vnq8sojq3.apps.googleusercontent.com';
-
-// 🔧 Firebase config
+//  Firebase config
 const firebaseConfig = {
   apiKey: 'AIzaSyArJQHNTFraEOp3ENdd67T6aV49hCCxoUo',
   authDomain: 'wellness-buddy-5de14.firebaseapp.com',
@@ -34,9 +31,13 @@ googleProvider.addScope('email');
 googleProvider.addScope('profile');
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// 🧠 Device detection
+// 🧠 Enhanced device detection
 const isMobile = () => {
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+const isCapacitorNative = () => {
+  return Capacitor.isNativePlatform();
 };
 
 // 🔁 Enhanced redirect tracking
@@ -66,24 +67,48 @@ const clearRedirectPending = () => {
   sessionStorage.removeItem(REDIRECT_TIMESTAMP_KEY);
 };
 
-// 🚀 Main sign-in function
+// 🚀 Enhanced Google Sign-In for Web and Android
 export const signInWithGoogle = async (forceRedirect = false) => {
   try {
-    // 🌐 Web-based login only
-    const useRedirect = forceRedirect || isMobile();
-    if (useRedirect) {
-      console.log('🔄 Using redirect authentication for mobile');
-      setRedirectPending();
-      await signInWithRedirect(auth, googleProvider);
-      return null;
+    // Check if running in Capacitor (Android app)
+    if (Capacitor.isNativePlatform()) {
+      console.log('🤖 Using native Android Google Sign-In');
+      
+      // Initialize Google Auth for Capacitor
+      await GoogleAuth.initialize({
+        scopes: ['profile', 'email'],
+        serverClientId: '610941252952-u9h8srgfr879aucl4sbc8h3f6i68cq7n.apps.googleusercontent.com',
+        forceCodeForRefreshToken: true
+      });
+
+      // Sign in with native Google Auth
+      const result = await GoogleAuth.signIn();
+      console.log('✅ Native Google Sign-In result:', result);
+
+      // Create Firebase credential from Google result
+      const credential = GoogleAuthProvider.credential(result.authentication.idToken);
+      const userCredential = await signInWithCredential(auth, credential);
+      
+      console.log('✅ Firebase authentication successful');
+      return userCredential.user;
     } else {
-      console.log('🪟 Using popup authentication for web');
-      const result = await signInWithPopup(auth, googleProvider);
-      return result.user;
+      // Web-based authentication
+      const useRedirect = forceRedirect || isMobile();
+      if (useRedirect) {
+        console.log('🔄 Using redirect authentication for mobile web');
+        setRedirectPending();
+        await signInWithRedirect(auth, googleProvider);
+        return null;
+      } else {
+        console.log('🪟 Using popup authentication for web');
+        const result = await signInWithPopup(auth, googleProvider);
+        return result.user;
+      }
     }
   } catch (error) {
     clearRedirectPending();
 
+    // Handle specific error cases
     if (error.code === 'auth/popup-blocked') {
       console.log('🚫 Popup blocked, falling back to redirect');
       setRedirectPending();
@@ -92,6 +117,11 @@ export const signInWithGoogle = async (forceRedirect = false) => {
     }
 
     if (error.code === 'auth/popup-closed-by-user') {
+      throw new Error('Sign-in was cancelled. Please try again.');
+    }
+
+    // Handle native Google Auth errors
+    if (error.message?.includes('User cancelled the flow')) {
       throw new Error('Sign-in was cancelled. Please try again.');
     }
 
@@ -155,11 +185,25 @@ export const handleRedirectResult = async () => {
   }
 };
 
-// 🚪 Sign out
+// 🚪 Enhanced Sign out for Web and Android
 export const signOutUser = async () => {
   try {
     clearRedirectPending();
+    
+    // Sign out from Firebase
     await auth.signOut();
+    
+    // If running on native platform, also sign out from native Google Auth
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await GoogleAuth.signOut();
+        console.log('✅ Native Google Sign-Out successful');
+      } catch (error) {
+        console.warn('⚠️ Native Google Sign-Out warning:', error);
+        // Don't throw - Firebase sign-out was successful
+      }
+    }
+    
     console.log('✅ User signed out successfully');
   } catch (error) {
     console.error('Sign out error:', error);
@@ -229,5 +273,6 @@ export const getAuthMethod = (user = null) => {
 };
 
 export const isMobileDevice = isMobile;
+export const isNativePlatform = isCapacitorNative;
 
 export const cleanup = () => clearRedirectPending();

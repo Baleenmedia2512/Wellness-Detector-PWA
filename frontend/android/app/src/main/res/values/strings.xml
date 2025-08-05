@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">wellness-buddy</string>
-    <string name="title_activity_main">wellness-buddy</string>
-    <string name="package_name">com.wellness.buddy</string>
-    <string name="custom_url_scheme">com.wellness.buddy</string>
-    <string name="server_client_id">155478550721-suf2sas620qebja2hbplfh20gktmom1k.apps.googleusercontent.com</string>
+    <string name="app_name">Wellness Buddy</string>
+    <string name="title_activity_main">Wellness Buddy</string>
+    <string name="package_name">com.wellnessbuddy.app</string>
+    <string name="custom_url_scheme">com.wellnessbuddy.app</string>
+    <string name="server_client_id">610941252952-u9h8srgfr879aucl4sbc8h3f6i68cq7n.apps.googleusercontent.com</string>
 </resources>
