@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  const { userId } = req.query;
+  const { userId, date, startDate, endDate, detailed = 'false' } = req.query;
 
   if (!userId) {
     return res.status(400).json({ message: 'UserId is required' });
@@ -25,6 +25,67 @@ export default async function handler(req, res) {
       password: process.env.DB_PASS,
       database: process.env.DB_NAME
     });
+
+    // If detailed nutrition data requested for dashboard
+    if (detailed === 'true' && date) {
+      const targetDate = new Date(date);
+      const startOfDay = new Date(targetDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(targetDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const [nutritionData] = await connection.execute(`
+        SELECT 
+          ID, ImagePath, AnalysisData, ConfidenceScore,
+          TotalCalories, TotalProtein, TotalCarbs, TotalFat, TotalFiber,
+          ProcessedBy, DeviceInfo, CreatedAt,
+          HOUR(CreatedAt) as meal_hour,
+          CASE 
+            WHEN HOUR(CreatedAt) >= 5 AND HOUR(CreatedAt) < 10 THEN 'breakfast'
+            WHEN HOUR(CreatedAt) >= 10 AND HOUR(CreatedAt) < 12 THEN 'morning-snack'
+            WHEN HOUR(CreatedAt) >= 12 AND HOUR(CreatedAt) < 16 THEN 'lunch'
+            WHEN HOUR(CreatedAt) >= 16 AND HOUR(CreatedAt) < 18 THEN 'evening-snack'
+            WHEN HOUR(CreatedAt) >= 18 AND HOUR(CreatedAt) < 23 THEN 'dinner'
+            ELSE 'late-night'
+          END as meal_category
+        FROM food_nutrition_data_table 
+        WHERE UserID = ? AND DATE(CreatedAt) >= ? AND DATE(CreatedAt) <= ?
+        ORDER BY CreatedAt DESC
+      `, [userId, startOfDay.toISOString(), endOfDay.toISOString()]);
+
+      // Calculate daily totals
+      const dailyTotals = nutritionData.reduce((totals, record) => ({
+        totalCalories: totals.totalCalories + (record.TotalCalories || 0),
+        totalProtein: totals.totalProtein + (record.TotalProtein || 0),
+        totalCarbs: totals.totalCarbs + (record.TotalCarbs || 0),
+        totalFat: totals.totalFat + (record.TotalFat || 0),
+        totalFiber: totals.totalFiber + (record.TotalFiber || 0),
+        mealCount: totals.mealCount + 1
+      }), {
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        totalFiber: 0,
+        mealCount: 0
+      });
+
+      await connection.end();
+
+      return res.status(200).json({
+        success: true,
+        data: nutritionData,
+        dailyTotals: {
+          ...dailyTotals,
+          totalCalories: Math.round(dailyTotals.totalCalories * 100) / 100,
+          totalProtein: Math.round(dailyTotals.totalProtein * 100) / 100,
+          totalCarbs: Math.round(dailyTotals.totalCarbs * 100) / 100,
+          totalFat: Math.round(dailyTotals.totalFat * 100) / 100,
+          totalFiber: Math.round(dailyTotals.totalFiber * 100) / 100
+        },
+        queryInfo: { userId, date, recordCount: nutritionData.length }
+      });
+    }
 
     // Get user statistics
     const [totalCount] = await connection.execute(
