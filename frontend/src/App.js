@@ -2,6 +2,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ImageUpload from './components/ImageUpload';
 import NutritionCard from './components/NutritionCard';
+import SuccessSavePopup from './components/SuccessSavePopup';
+import { saveNutritionAnalysis, deleteNutritionAnalysis } from './services/nutritionSaveService';
 import TestImageGuide from './components/TestImageGuide';
 import CameraTest from './components/CameraTest';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -43,6 +45,13 @@ function WellnessBuddyApp() {
     localStorage.getItem('isOtpVerified') === 'true'
   );
   const fileInputRef = useRef(null);
+
+  // Success popup state
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [savedAnalysisId, setSavedAnalysisId] = useState(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   const requestAllPermissions = async () => {
   if (!Capacitor.isNativePlatform()) return;
@@ -215,6 +224,10 @@ function WellnessBuddyApp() {
     setError(null);
     setNutritionData(null);
 
+    setShowSuccessPopup(false);
+    setSavedAnalysisId(null);
+    setSaveError(null);
+
     const reader = new FileReader();
     reader.onload = async (e) => {
       setImagePreview(e.target.result);
@@ -224,6 +237,26 @@ function WellnessBuddyApp() {
         setLoading(true);
         const result = await geminiService.analyzeImageForNutrition(file);
         setNutritionData(result);
+
+        // Auto-save to DB after analysis
+        setSaveLoading(true);
+        try {
+          // Always prioritize user email for team_table lookup, fallback to other identifiers
+          const userIdentifier = user.email || user.id || user.uid || 'anonymous';
+          
+          const saveRes = await saveNutritionAnalysis({
+            userId: userIdentifier,
+            imagePath: file.name,
+            analysisResult: result,
+            deviceInfo: window.navigator.userAgent
+          });
+          setSavedAnalysisId(saveRes.id);
+          setShowSuccessPopup(true);
+        } catch (err) {
+          setSaveError('Failed to save analysis: ' + (err.message || 'Unknown error'));
+        } finally {
+          setSaveLoading(false);
+        }
       } catch (err) {
         const friendlyMessage = getFriendlyErrorMessage(err);
         setError(friendlyMessage);
@@ -234,6 +267,37 @@ function WellnessBuddyApp() {
     };
 
     reader.readAsDataURL(file);
+  };
+
+  // Success popup handlers
+  const handleSuccessPopupClose = () => {
+    setShowSuccessPopup(false);
+  };
+
+  const handleSuccessPopupDelete = async () => {
+    if (!savedAnalysisId) return;
+    setDeleteLoading(true);
+    try {
+      await deleteNutritionAnalysis({ id: savedAnalysisId });
+      setShowSuccessPopup(false);
+      setSavedAnalysisId(null);
+      setNutritionData(null);
+      setImagePreview(null);
+      setSelectedImage(null);
+    } catch (err) {
+      setSaveError('Failed to delete: ' + (err.message || 'Unknown error'));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleSuccessPopupSave = () => {
+    setShowSuccessPopup(false);
+  };
+
+  const handleSuccessPopupViewDetails = (nutritionData) => {
+    setShowSuccessPopup(false);
+    setShowNutritionDashboard(true);
   };
 
   const getFriendlyErrorMessage = (error) => {
@@ -480,6 +544,25 @@ function WellnessBuddyApp() {
         )}
 
         {nutritionData && <NutritionCard data={nutritionData} />}
+
+        {/* Success Save Popup */}
+        <SuccessSavePopup
+          open={showSuccessPopup}
+          onClose={handleSuccessPopupClose}
+          onDelete={handleSuccessPopupDelete}
+          nutritionData={nutritionData}
+          imagePreview={imagePreview}
+        />
+        {saveLoading && (
+          <div className="fixed bottom-0 left-0 right-0 flex justify-center z-50">
+            <div className="bg-green-600 text-white px-6 py-3 rounded-t-xl shadow-lg animate-pulse font-semibold">Saving nutrition analysis...</div>
+          </div>
+        )}
+        {saveError && (
+          <div className="fixed bottom-0 left-0 right-0 flex justify-center z-50">
+            <div className="bg-red-600 text-white px-6 py-3 rounded-t-xl shadow-lg font-semibold">{saveError}</div>
+          </div>
+        )}
 
         <div className="bg-white rounded-xl shadow-lg border border-green-200 p-4">
           <h3 className="font-semibold text-green-700 mb-2">📋 How to use:</h3>
