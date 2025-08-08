@@ -25,12 +25,49 @@ export default async function handler(req, res) {
     // Parse analysis result to extract nutrition values
     let totalCalories = null, totalProtein = null, totalCarbs = null, totalFat = null, totalFiber = null;
     let confidenceScore = null;
+    let processedBy = 'manual_app'; // Default for manual saves (matches DB enum)
+    
+    // Function to convert confidence string to numeric value
+    const convertConfidenceToNumeric = (confidence) => {
+      if (typeof confidence === 'number') return confidence;
+      if (typeof confidence === 'string') {
+        switch (confidence.toLowerCase()) {
+          case 'high': return 0.90;
+          case 'medium': return 0.70;
+          case 'low': return 0.50;
+          case 'very_high': return 0.95;
+          case 'very_low': return 0.30;
+          default: return 0.70; // Default to medium confidence
+        }
+      }
+      return null;
+    };
     
     try {
       const analysis = typeof analysisResult === 'string' ? JSON.parse(analysisResult) : analysisResult;
       
-      // Extract nutrition data from first food item
-      if (analysis.foods && analysis.foods.length > 0) {
+      // Check if this is from background service (has foods array with total)
+      if (analysis.foods && analysis.foods.length > 0 && analysis.total) {
+        // This is the standard format (both background service and manual save now use this)
+        totalCalories = analysis.total.calories || null;
+        totalProtein = analysis.total.protein || null;
+        totalCarbs = analysis.total.carbs || null;
+        totalFat = analysis.total.fat || null;
+        totalFiber = analysis.total.fiber || null;
+        confidenceScore = convertConfidenceToNumeric(analysis.confidence);
+        // Determine source based on deviceInfo - only actual Android Background Service should be background_service
+        processedBy = (deviceInfo && deviceInfo.includes('Android Background Service')) ? 'background_service' : 'manual_app';
+      } else if (analysis.nutrition) {
+        // Legacy manual save format - use nutrition object (keeping for backwards compatibility)
+        totalCalories = analysis.nutrition.calories || null;
+        totalProtein = analysis.nutrition.protein || null;
+        totalCarbs = analysis.nutrition.carbs || null;
+        totalFat = analysis.nutrition.fat || null;
+        totalFiber = analysis.nutrition.fiber || null;
+        confidenceScore = convertConfidenceToNumeric(analysis.confidence);
+        processedBy = 'manual_app';
+      } else if (analysis.foods && analysis.foods.length > 0) {
+        // Fallback: extract from first food item (legacy format)
         const firstFood = analysis.foods[0];
         if (firstFood.nutrition) {
           totalCalories = firstFood.nutrition.calories || null;
@@ -39,8 +76,8 @@ export default async function handler(req, res) {
           totalFat = firstFood.nutrition.fat || null;
           totalFiber = firstFood.nutrition.fiber || null;
         }
-        // Extract confidence if available
-        confidenceScore = firstFood.confidence || null;
+        confidenceScore = convertConfidenceToNumeric(firstFood.confidence || analysis.confidence);
+        processedBy = 'background_service';
       }
     } catch (parseError) {
       console.warn('Could not parse nutrition data:', parseError);
@@ -60,7 +97,7 @@ export default async function handler(req, res) {
         UserID, ImagePath, AnalysisData, ConfidenceScore, 
         TotalCalories, TotalProtein, TotalCarbs, TotalFat, TotalFiber,
         ProcessedBy, DeviceInfo
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'background_service', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const analysisDataJson = typeof analysisResult === 'string' ? analysisResult : JSON.stringify(analysisResult);
@@ -75,12 +112,13 @@ export default async function handler(req, res) {
       totalCarbs,
       totalFat,
       totalFiber,
-      deviceInfo || 'Android Background Service'
+      processedBy,
+      deviceInfo || (processedBy === 'background_service' ? 'Android Background Service' : 'Wellness Buddy Web App')
     ]);
 
     await connection.end();
 
-    console.log(`✅ Background analysis saved for user ${userId}, ID: ${result.insertId}`);
+    console.log(`✅ Nutrition analysis saved for user ${userId}, ID: ${result.insertId}, ProcessedBy: ${processedBy}, Confidence: ${confidenceScore}`);
 
     res.status(200).json({
       success: true,

@@ -146,19 +146,93 @@ const NutritionDashboard = ({ user, onBack, apiBaseUrl }) => {
     setLoading(true);
     setError(null);
     
-    try {
-      const userId = user.id || user.uid || user.email;
-      const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const calculateDailyStats = (dayAnalyses) => {
+      const stats = dayAnalyses.reduce((acc, analysis) => {
+        // Parse nutrition data from AnalysisData JSON
+        const foodData = parseAnalysisData(analysis.AnalysisData);
+        const nutrition = foodData.nutrition || {};
+        
+        // Use JSON nutrition data, fallback to database columns
+        const calories = nutrition.calories || analysis.TotalCalories || 0;
+        const protein = nutrition.protein || analysis.TotalProtein || 0;
+        const carbs = nutrition.carbs || analysis.TotalCarbs || 0;
+        const fat = nutrition.fat || analysis.TotalFat || 0;
+        const fiber = nutrition.fiber || analysis.TotalFiber || 0;
+        
+        return {
+          totalCalories: acc.totalCalories + calories,
+          totalProtein: acc.totalProtein + protein,
+          totalCarbs: acc.totalCarbs + carbs,
+          totalFat: acc.totalFat + fat,
+          totalFiber: acc.totalFiber + fiber,
+          mealCount: acc.mealCount + 1
+        };
+      }, {
+        totalCalories: 0,
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        totalFiber: 0,
+        mealCount: 0
+      });
       
+      setDailyStats(stats);
+    };
+    
+    try {
+      // For OTP users, user.id contains the database UserID directly
+      // For Firebase users, we need to lookup the UserID from team_table
+      let actualUserId = user.id; // OTP users have database UserID here
+      
+      // If no user.id (Firebase user), lookup the team_table UserID
+      if (!actualUserId && user.uid) {
+        console.log('[NutritionDashboard] Firebase user detected, looking up team_table UserID');
+        try {
+          const lookupResponse = await fetch(`${apiBaseUrl}/api/lookup-user-id`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              email: user.email, 
+              firebaseUid: user.uid 
+            })
+          });
+          const lookupData = await lookupResponse.json();
+          if (lookupData.success && lookupData.userId) {
+            actualUserId = lookupData.userId;
+            console.log('[NutritionDashboard] Using team_table UserID:', actualUserId);
+          } else {
+            console.warn('[NutritionDashboard] No UserID found in team_table for:', user.email || user.uid);
+            setError('User account not found in database. Please contact support.');
+            return;
+          }
+        } catch (lookupErr) {
+          console.error('[NutritionDashboard] UserID lookup failed:', lookupErr.message);
+          setError('Failed to lookup user account. Please try again.');
+          return;
+        }
+      }
+      
+      // Fallback if still no actualUserId
+      if (!actualUserId) {
+        console.error('[NutritionDashboard] No UserID available for user');
+        setError('Unable to determine user account. Please try logging in again.');
+        return;
+      }
+      
+      const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+      console.log('actualUserId:', actualUserId);
+      console.log('dateString:', dateString);
+
       // Use the enhanced API for better performance
       const response = await fetch(
-        `${apiBaseUrl}/api/user-nutrition-stats?userId=${userId}&date=${dateString}&detailed=true`
+        `${apiBaseUrl}/api/user-nutrition-stats?userId=${actualUserId}&date=${dateString}&detailed=true`
       );
       const data = await response.json();
       
       if (data.success) {
         const analysesData = data.data || [];
         setAnalyses(analysesData);
+        console.log('analysesData:', analysesData);
         
         // Always calculate daily stats from the actual data to ensure accuracy
         calculateDailyStats(analysesData);
@@ -173,39 +247,6 @@ const NutritionDashboard = ({ user, onBack, apiBaseUrl }) => {
       setLoading(false);
     }
   }, [user, apiBaseUrl]);
-
-  const calculateDailyStats = (dayAnalyses) => {
-    const stats = dayAnalyses.reduce((acc, analysis) => {
-      // Parse nutrition data from AnalysisData JSON
-      const foodData = parseAnalysisData(analysis.AnalysisData);
-      const nutrition = foodData.nutrition || {};
-      
-      // Use JSON nutrition data, fallback to database columns
-      const calories = nutrition.calories || analysis.TotalCalories || 0;
-      const protein = nutrition.protein || analysis.TotalProtein || 0;
-      const carbs = nutrition.carbs || analysis.TotalCarbs || 0;
-      const fat = nutrition.fat || analysis.TotalFat || 0;
-      const fiber = nutrition.fiber || analysis.TotalFiber || 0;
-      
-      return {
-        totalCalories: acc.totalCalories + calories,
-        totalProtein: acc.totalProtein + protein,
-        totalCarbs: acc.totalCarbs + carbs,
-        totalFat: acc.totalFat + fat,
-        totalFiber: acc.totalFiber + fiber,
-        mealCount: acc.mealCount + 1
-      };
-    }, {
-      totalCalories: 0,
-      totalProtein: 0,
-      totalCarbs: 0,
-      totalFat: 0,
-      totalFiber: 0,
-      mealCount: 0
-    });
-    
-    setDailyStats(stats);
-  };
 
   useEffect(() => {
     if (user) {
@@ -246,7 +287,28 @@ const NutritionDashboard = ({ user, onBack, apiBaseUrl }) => {
     try {
       const parsed = typeof analysisData === 'string' ? JSON.parse(analysisData) : analysisData;
       
-      // Handle new data structure from your database
+      // Handle unified format with foods array and total object (both background service and manual saves)
+      if (parsed.foods && parsed.foods.length > 0 && parsed.total) {
+        // Use the total nutrition values for display
+        return {
+          name: parsed.foods.length > 1 
+            ? `Mixed Foods (${parsed.foods.length} items)` 
+            : parsed.foods[0].name || 'Unknown Food',
+          nutrition: {
+            calories: parsed.total.calories || 0,
+            protein: parsed.total.protein || 0,
+            carbs: parsed.total.carbs || 0,
+            fat: parsed.total.fat || 0,
+            fiber: parsed.total.fiber || 0
+          },
+          confidence: typeof parsed.confidence === 'string' 
+            ? (parsed.confidence === 'medium' ? 0.7 : parsed.confidence === 'high' ? 0.9 : parsed.confidence === 'low' ? 0.5 : 0.7)
+            : parsed.confidence || null,
+          detailedItems: parsed.foods || []
+        };
+      }
+      
+      // Handle legacy manual save format with top-level nutrition object
       if (parsed.category && parsed.category.name) {
         return {
           name: parsed.category.name,
@@ -256,14 +318,14 @@ const NutritionDashboard = ({ user, onBack, apiBaseUrl }) => {
         };
       }
       
-      // Handle legacy data structure
+      // Handle legacy background service format with foods array but no total
       if (parsed.foods && parsed.foods.length > 0) {
         const firstFood = parsed.foods[0];
         return {
           name: firstFood.name || 'Unknown Food',
           nutrition: firstFood.nutrition || {},
           confidence: firstFood.confidence || null,
-          detailedItems: []
+          detailedItems: parsed.foods || []
         };
       }
       
@@ -850,11 +912,6 @@ const NutritionDashboard = ({ user, onBack, apiBaseUrl }) => {
                                         {calories ? `${Math.round(calories)}.0 Cal` : '— Cal'}
                                       </div>
                                     </div>
-                                    <button className="text-gray-400 hover:text-gray-600">
-                                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"/>
-                                      </svg>
-                                    </button>
                                   </div>
                                 </div>
                               </div>
@@ -871,170 +928,172 @@ const NutritionDashboard = ({ user, onBack, apiBaseUrl }) => {
         )}
       </div>
 
-      {/* Detailed Meal Modal */}
+      {/* Detailed Meal Modal - Bottom Sheet Style */}
       {selectedMeal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Meal Details</h2>
-                <button
-                  onClick={() => setSelectedMeal(null)}
-                  className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center hover:bg-gray-200 transition-colors"
-                >
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-end justify-center animate-fadeIn">
+          <div className="bg-white rounded-t-2xl w-full max-w-md mx-4 mb-4 max-h-[85vh] overflow-hidden shadow-2xl animate-slideUp">
+            {(() => {
+              const foodData = parseAnalysisData(selectedMeal.AnalysisData);
+              console.log('Modal foodData:', foodData); // Debug log
+              const mealTime = new Date(selectedMeal.CreatedAt).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+              const mealDate = new Date(selectedMeal.CreatedAt).toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              });
 
-            {/* Modal Content */}
-            <div className="p-6">
-              {(() => {
-                const foodData = parseAnalysisData(selectedMeal.AnalysisData);
-                const mealTime = new Date(selectedMeal.CreatedAt).toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                });
-                const mealDate = new Date(selectedMeal.CreatedAt).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                });
+              // Use nutrition data from AnalysisData JSON, fallback to database columns
+              const calories = foodData.nutrition.calories || selectedMeal.TotalCalories || 0;
+              const protein = foodData.nutrition.protein || selectedMeal.TotalProtein || 0;
+              const carbs = foodData.nutrition.carbs || selectedMeal.TotalCarbs || 0;
+              const fat = foodData.nutrition.fat || selectedMeal.TotalFat || 0;
+              const fiber = foodData.nutrition.fiber || selectedMeal.TotalFiber || 0;
 
-                // Use nutrition data from AnalysisData JSON, fallback to database columns
-                const calories = foodData.nutrition.calories || selectedMeal.TotalCalories || 0;
-                const protein = foodData.nutrition.protein || selectedMeal.TotalProtein || 0;
-                const carbs = foodData.nutrition.carbs || selectedMeal.TotalCarbs || 0;
-                const fat = foodData.nutrition.fat || selectedMeal.TotalFat || 0;
-                const fiber = foodData.nutrition.fiber || selectedMeal.TotalFiber || 0;
-                const sugar = foodData.nutrition.sugar || selectedMeal.TotalSugar || 0;
-                const sodium = foodData.nutrition.sodium || selectedMeal.TotalSodium || 0;
+              return (
+                <div className="overflow-y-auto max-h-full">
+                  {/* Food Image - Compact */}
+                  {selectedMeal.ImagePath && (
+                    <div className="mb-3">
+                      <img
+                        src={selectedMeal.ImagePath}
+                        // src={selectedMeal.ImagePath.startsWith('http') ? 
+                        //   selectedMeal.ImagePath : 
+                        //   selectedMeal.ImagePath.startsWith('/storage/') ?
+                        //     `file://${selectedMeal.ImagePath}` :
+                        //     `${apiBaseUrl}/${selectedMeal.ImagePath.replace(/^\/+/, '')}`
+                        // }
+                        alt={foodData.name || 'Food image'}
+                        className="w-full h-32 object-cover rounded-lg shadow-md"
+                        onError={(e) => {
+                          console.log('Image load error for path:', selectedMeal.ImagePath);
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
 
-                return (
-                  <>
-                    {/* Food Image */}
-                    {selectedMeal.ImagePath && (
-                      <div className="mb-6">
-                        <img
-                          src={`${apiBaseUrl}${selectedMeal.ImagePath}`}
-                          alt={foodData.name}
-                          className="w-full h-48 object-cover rounded-xl"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
+                  {/* Header with meal info and close button */}
+                  <div className="flex items-start justify-between mb-2 px-3">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-gray-800 text-base mb-1">
+                        {foodData.detailedItems && foodData.detailedItems.length > 1 
+                          ? `Mixed Foods (${foodData.detailedItems.length} items)`
+                          : foodData.detailedItems && foodData.detailedItems.length === 1
+                          ? foodData.detailedItems[0].name
+                          : foodData.name || 'Mixed Foods'
+                        }
+                      </h3>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+                        <span>{mealTime}</span>
+                        <span>•</span>
+                        <span>{mealDate}</span>
                       </div>
-                    )}
-
-                    {/* Food Name and Basic Info */}
-                    <div className="mb-6">
-                      <h3 className="text-xl font-bold text-gray-900 mb-2">{foodData.name}</h3>
-                      <div className="flex items-center space-x-4 text-sm text-gray-600">
-                        <div className="flex items-center space-x-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                          </svg>
-                          <span>{mealTime}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                          </svg>
-                          <span>{mealDate}</span>
-                        </div>
-                      </div>
-                      {foodData.confidence && (
-                        <div className="mt-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {Math.round(foodData.confidence * 100)}% confidence
-                          </span>
-                        </div>
+                      {selectedMeal.ConfidenceScore && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-green-100 text-xs text-green-700 font-medium">
+                          {Math.round(selectedMeal.ConfidenceScore * 100)}% confidence
+                        </span>
                       )}
                     </div>
+                    
+                    {/* Close Button */}
+                    <button
+                      onClick={() => setSelectedMeal(null)}
+                      className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
+                      title="Close"
+                    >
+                      <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
 
-                    {/* Calories Highlight */}
-                    <div className="bg-orange-50 rounded-xl p-4 mb-6 text-center">
-                      <div className="text-3xl font-bold text-orange-600 mb-1">
-                        {calories ? Math.round(calories) : '—'}
-                      </div>
-                      <div className="text-sm text-orange-600 font-medium">Calories</div>
+                  {/* Compact Calories Summary */}
+                  <div className="bg-orange-50 rounded-lg p-2 mb-3 mx-3 text-center border border-orange-200">
+                    <div className="text-lg font-bold text-orange-600">
+                      {calories ? Math.round(calories) : '—'}
                     </div>
+                    <div className="text-xs text-orange-600 font-medium">Calories</div>
+                  </div>
 
-                    {/* Detailed Nutrition Information */}
-                    <div className="space-y-4">
-                      <h4 className="text-lg font-semibold text-gray-900 mb-3">Nutrition Information</h4>
-                      
-                      {/* Macronutrients */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-green-50 rounded-xl p-4 text-center">
-                          <div className="text-xl font-bold text-green-600">
-                            {carbs ? `${Math.round(carbs)}g` : '—'}
-                          </div>
-                          <div className="text-sm text-green-600 font-medium">Carbohydrates</div>
-                        </div>
-                        <div className="bg-blue-50 rounded-xl p-4 text-center">
-                          <div className="text-xl font-bold text-blue-600">
-                            {protein ? `${Math.round(protein)}g` : '—'}
-                          </div>
-                          <div className="text-sm text-blue-600 font-medium">Protein</div>
-                        </div>
-                        <div className="bg-yellow-50 rounded-xl p-4 text-center">
-                          <div className="text-xl font-bold text-yellow-600">
-                            {fat ? `${Math.round(fat)}g` : '—'}
-                          </div>
-                          <div className="text-sm text-yellow-600 font-medium">Total Fat</div>
-                        </div>
-                        <div className="bg-purple-50 rounded-xl p-4 text-center">
-                          <div className="text-xl font-bold text-purple-600">
-                            {fiber ? `${Math.round(fiber)}g` : '—'}
-                          </div>
-                          <div className="text-sm text-purple-600 font-medium">Fiber</div>
-                        </div>
-                      </div>
-
-                      {/* Additional Nutrients */}
-                      {(sugar > 0 || sodium > 0) && (
-                        <div className="mt-6">
-                          <h5 className="text-base font-semibold text-gray-900 mb-3">Additional Information</h5>
-                          <div className="space-y-3">
-                            {sugar > 0 && (
-                              <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span className="text-gray-700">Sugar</span>
-                                <span className="font-medium text-gray-900">{Math.round(sugar)}g</span>
+                  {/* Individual Food Items */}
+                  {foodData.detailedItems && foodData.detailedItems.length > 0 && (
+                    <div className="mb-3 px-3">
+                      <h4 className="font-semibold text-gray-800 text-sm mb-2">Food Items</h4>
+                      <div className="space-y-2">
+                        {foodData.detailedItems.map((food, index) => (
+                          <div key={index} className="flex items-center justify-between py-2 px-3 bg-white rounded-lg border border-gray-200">
+                            {/* Food Details */}
+                            <div className="flex-1">
+                              <div className="flex items-baseline space-x-2">
+                                <h5 className="font-semibold text-gray-800 text-sm">{food.name}</h5>
+                                {food.portion && (
+                                  <span className="text-xs text-gray-400">{food.portion}</span>
+                                )}
                               </div>
-                            )}
-                            {sodium > 0 && (
-                              <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                                <span className="text-gray-700">Sodium</span>
-                                <span className="font-medium text-gray-900">{Math.round(sodium)}mg</span>
-                              </div>
-                            )}
-                            <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                              <span className="text-gray-700">Processed By</span>
-                              <span className="font-medium text-gray-900">{selectedMeal.ProcessedBy || 'Manual Entry'}</span>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {Math.round(food.nutrition?.carbs || 0)}g carbs • {Math.round(food.nutrition?.protein || 0)}g protein • {Math.round(food.nutrition?.fat || 0)}g fat{food.nutrition?.fiber > 0 ? ` • ${Math.round(food.nutrition.fiber)}g fiber` : ''}
+                              </p>
+                            </div>
+                            
+                            {/* Calories */}
+                            <div className="text-right">
+                              <span className="font-bold text-orange-600 text-sm">
+                                {Math.round(food.nutrition?.calories || 0)} kcal
+                              </span>
                             </div>
                           </div>
-                        </div>
-                      )}
-
-                      {/* Action Buttons */}
-                      <div className="mt-6 space-y-3">
-                        <button className="w-full bg-orange-500 text-white py-3 rounded-xl font-semibold hover:bg-orange-600 transition-colors">
-                          Edit Meal
-                        </button>
-                        <button className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-colors">
-                          Delete Meal
-                        </button>
+                        ))}
                       </div>
                     </div>
-                  </>
-                );
-              })()}
-            </div>
+                  )}
+
+                  {/* Compact Total Nutrition Summary */}
+                  <div className="mb-3 px-3">
+                    <h4 className="font-semibold text-gray-800 text-sm mb-2">Total Nutrition</h4>
+                    <div className="grid grid-cols-2 gap-1">
+                      <div className="bg-green-50 rounded-md p-1.5 text-center border border-green-200">
+                        <div className="text-sm font-bold text-green-600">
+                          {carbs ? `${Math.round(carbs)}g` : '—'}
+                        </div>
+                        <div className="text-xs text-green-600">Carbs</div>
+                      </div>
+                      <div className="bg-blue-50 rounded-md p-1.5 text-center border border-blue-200">
+                        <div className="text-sm font-bold text-blue-600">
+                          {protein ? `${Math.round(protein)}g` : '—'}
+                        </div>
+                        <div className="text-xs text-blue-600">Protein</div>
+                      </div>
+                      <div className="bg-yellow-50 rounded-md p-1.5 text-center border border-yellow-200">
+                        <div className="text-sm font-bold text-yellow-600">
+                          {fat ? `${Math.round(fat)}g` : '—'}
+                        </div>
+                        <div className="text-xs text-yellow-600">Fat</div>
+                      </div>
+                      <div className="bg-purple-50 rounded-md p-1.5 text-center border border-purple-200">
+                        <div className="text-sm font-bold text-purple-600">
+                          {fiber ? `${Math.round(fiber)}g` : '—'}
+                        </div>
+                        <div className="text-xs text-purple-600">Fiber</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Compact Action Buttons */}
+                  <div className="space-y-2 px-3 pb-3">
+                    <button className="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors">
+                      Edit Meal
+                    </button>
+                    <button className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-1.5 px-4 rounded-lg transition-colors">
+                      Delete Meal
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

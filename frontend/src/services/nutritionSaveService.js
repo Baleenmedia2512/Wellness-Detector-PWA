@@ -1,4 +1,75 @@
 /**
+ * Transform analysis result to match background service format
+ * Background service format: { foods: [...], total: {...}, confidence: "..." }
+ * Manual save format: { nutrition: {...}, detailedItems: [...], confidence: "..." }
+ */
+function transformToBackgroundServiceFormat(analysisResult) {
+  try {
+    if (!analysisResult) return analysisResult;
+    
+    // If already in background service format (has foods and total), return as-is
+    if (analysisResult.foods && analysisResult.total) {
+      return analysisResult;
+    }
+    
+    // If in manual save format (has nutrition object), transform it
+    if (analysisResult.nutrition) {
+      const nutrition = analysisResult.nutrition;
+      const detailedItems = analysisResult.detailedItems || [];
+      
+      // Create foods array from detailedItems if available, or create single food item
+      const foods = detailedItems.length > 0 
+        ? detailedItems.map(item => ({
+            name: item.name || 'Unknown Food',
+            portion: item.portionDescription || '1 serving',
+            weight_g: typeof item.estimatedWeight === 'number' ? item.estimatedWeight : 100,
+            nutrition: {
+              calories: item.calories || 0,
+              protein: item.protein || 0,
+              carbs: item.carbs || 0,
+              fat: item.fat || 0,
+              fiber: item.fiber || 0
+            }
+          }))
+        : [{
+            name: analysisResult.category?.name || 'Unknown Food',
+            portion: '1 serving',
+            weight_g: 100,
+            nutrition: {
+              calories: nutrition.calories || 0,
+              protein: nutrition.protein || 0,
+              carbs: nutrition.carbs || 0,
+              fat: nutrition.fat || 0,
+              fiber: nutrition.fiber || 0
+            }
+          }];
+      
+      // Create total object from nutrition
+      const total = {
+        calories: nutrition.calories || 0,
+        protein: nutrition.protein || 0,
+        carbs: nutrition.carbs || 0,
+        fat: nutrition.fat || 0,
+        fiber: nutrition.fiber || 0
+      };
+      
+      return {
+        foods: foods,
+        total: total,
+        confidence: analysisResult.confidence || 'medium'
+      };
+    }
+    
+    // If in unknown format, return as-is
+    return analysisResult;
+    
+  } catch (error) {
+    console.error('[transformToBackgroundServiceFormat] Error transforming data:', error);
+    return analysisResult; // Return original if transformation fails
+  }
+}
+
+/**
  * Utility to lookup the real UserID from team_table based on email
  * Returns: { success, userId, ... }
  */
@@ -61,11 +132,14 @@ export async function saveNutritionAnalysis({ userId, imagePath, analysisResult,
       throw new Error('Please log in with a valid email to save nutrition data.');
     }
     
-    console.log('[saveNutritionAnalysis] Sending:', { userId: actualUserId, imagePath, analysisResult, deviceInfo });
+    // Transform analysisResult to match background service format (foods array + total object)
+    const transformedAnalysisResult = transformToBackgroundServiceFormat(analysisResult);
+    
+    console.log('[saveNutritionAnalysis] Sending:', { userId: actualUserId, imagePath, analysisResult: transformedAnalysisResult, deviceInfo });
     const res = await fetch(`${apiBaseUrl}/api/save-background-analysis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: actualUserId, imagePath, analysisResult, deviceInfo })
+      body: JSON.stringify({ userId: actualUserId, imagePath, analysisResult: transformedAnalysisResult, deviceInfo })
     });
     console.log('[saveNutritionAnalysis] Response status:', res.status);
     const data = await res.json();
