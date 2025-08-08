@@ -38,7 +38,9 @@ function WellnessBuddyApp() {
   const [error, setError] = useState(null);
   const [showTestGuide, setShowTestGuide] = useState(false);
   const [showCameraTest, setShowCameraTest] = useState(false);
-  const [showNutritionDashboard, setShowNutritionDashboard] = useState(false);
+  const [showNutritionDashboard, setShowNutritionDashboard] = useState(
+    localStorage.getItem('currentPage') === 'nutrition-dashboard'
+  );
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isOtpVerified, setIsOtpVerified] = useState(
@@ -53,6 +55,17 @@ function WellnessBuddyApp() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
+  // Helper functions for navigation with localStorage persistence
+  const showNutritionDashboardPage = () => {
+    setShowNutritionDashboard(true);
+    localStorage.setItem('currentPage', 'nutrition-dashboard');
+  };
+
+  const showMainPage = () => {
+    setShowNutritionDashboard(false);
+    localStorage.setItem('currentPage', 'main');
+  };
+
   const requestAllPermissions = async () => {
   if (!Capacitor.isNativePlatform()) return;
 
@@ -66,7 +79,6 @@ function WellnessBuddyApp() {
     // Notifications permission (Capacitor way)
     await PushNotifications.requestPermissions();
 
-    console.log('✅ Permissions requested');
   } catch (err) {
     console.warn('❌ Permission request failed:', err);
   }
@@ -79,7 +91,6 @@ function WellnessBuddyApp() {
       import('@capacitor/status-bar').then(({ StatusBar }) => {
         // Simple configuration - rely on native configuration
         StatusBar.setOverlaysWebView({ overlay: false });
-        console.log('✅ Status bar configured with overlay: false');
       }).catch((err) => {
         console.warn('StatusBar plugin not available:', err);
       });
@@ -104,9 +115,8 @@ function WellnessBuddyApp() {
         const { GalleryMonitorPlugin } = await import('./plugins/galleryMonitorPlugin');
         
         const listener = await GalleryMonitorPlugin.addListener('notificationClicked', (data) => {
-          console.log('Notification clicked:', data);
           if (data && data.action === 'openBackgroundHistory') {
-            setShowNutritionDashboard(true);
+            showNutritionDashboardPage();
           }
         });
 
@@ -133,9 +143,7 @@ function WellnessBuddyApp() {
     const checkRedirectResult = async () => {
       try {
         const resultUser = await handleRedirectResult();
-        console.log('result user', resultUser)
         if (resultUser) {
-          console.log('✅ Redirect authentication completed');
           setUser(resultUser);
           setAuthLoading(false);
         }
@@ -161,10 +169,8 @@ function WellnessBuddyApp() {
         const userId = user.id || user.uid || user.email || 'anonymous';  // user.id for OTP, user.uid for Firebase
         const userEmail = user.email || null;
         GalleryMonitor.setCurrentUser(userId, userEmail);
-        console.log('✅ Background service user context updated:', { userId, userEmail, type: user.id ? 'OTP' : 'Firebase' });
       } else if (!user && Capacitor.isNativePlatform()) {
         GalleryMonitor.clearCurrentUser();
-        console.log('✅ Background service user context cleared');
       }
     });
 
@@ -297,7 +303,7 @@ function WellnessBuddyApp() {
 
   const handleSuccessPopupViewDetails = (nutritionData) => {
     setShowSuccessPopup(false);
-    setShowNutritionDashboard(true);
+    showNutritionDashboardPage();
   };
 
   const getFriendlyErrorMessage = (error) => {
@@ -327,6 +333,7 @@ function WellnessBuddyApp() {
     setIsOtpVerified(false);
     localStorage.removeItem('isOtpVerified');
     localStorage.removeItem('otpUser');
+    localStorage.removeItem('currentPage'); // Clear current page
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -336,13 +343,10 @@ function WellnessBuddyApp() {
     try {
       setLoading(true);
       setError(null);
-
-      console.log('🔐 Starting Google sign-in process');
       const user = await signInWithGoogle(forceRedirect);
 
       // For popup authentication, user is returned immediately
       if (user) {
-        console.log('✅ User signed in via popup:', user.email);
         await saveUserToBackend(user);
         setUser(user);
       } else {
@@ -381,11 +385,9 @@ function WellnessBuddyApp() {
       setLoading(true);
       setError(null);
 
-      console.log('🪟 Starting popup sign-in');
       const user = await signInWithGooglePopup();
       
       if (user) {
-        console.log('✅ Popup sign-in successful:', user.email);
         await saveUserToBackend(user);
         setUser(user);
       }
@@ -493,7 +495,7 @@ function WellnessBuddyApp() {
     return (
       <NutritionDashboard
         user={user}
-        onBack={() => setShowNutritionDashboard(false)}
+        onBack={showMainPage}
         apiBaseUrl={apiBaseUrl}
       />
     );
@@ -505,7 +507,7 @@ function WellnessBuddyApp() {
       <Header
         user={user}
         onTestCamera={() => setShowCameraTest(true)}
-        onShowBackgroundHistory={() => setShowNutritionDashboard(true)}
+        onShowBackgroundHistory={showNutritionDashboardPage}
         onSignOut={handleSignOut}
       />
       
@@ -514,7 +516,7 @@ function WellnessBuddyApp() {
         {Capacitor.isNativePlatform() && (
           <div className="fixed bottom-4 right-4 z-40">
             <button
-              onClick={() => setShowNutritionDashboard(true)}
+              onClick={showNutritionDashboardPage}
               className="bg-green-500 hover:bg-green-600 text-white p-3 rounded-full shadow-lg transition-colors flex items-center space-x-2"
               title="View Nutrition Dashboard"
             >

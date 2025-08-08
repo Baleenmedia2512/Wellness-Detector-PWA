@@ -72,7 +72,6 @@ export const signInWithGoogle = async (forceRedirect = false) => {
   try {
     // Check if running in Capacitor (Android app)
     if (Capacitor.isNativePlatform()) {
-      console.log('🤖 Using native Android Google Sign-In');
       
       // Initialize Google Auth for Capacitor
       await GoogleAuth.initialize({
@@ -83,24 +82,20 @@ export const signInWithGoogle = async (forceRedirect = false) => {
 
       // Sign in with native Google Auth
       const result = await GoogleAuth.signIn();
-      console.log('✅ Native Google Sign-In result:', result);
 
       // Create Firebase credential from Google result
       const credential = GoogleAuthProvider.credential(result.authentication.idToken);
       const userCredential = await signInWithCredential(auth, credential);
       
-      console.log('✅ Firebase authentication successful');
       return userCredential.user;
     } else {
       // Web-based authentication
       const useRedirect = forceRedirect || isMobile();
       if (useRedirect) {
-        console.log('🔄 Using redirect authentication for mobile web');
         setRedirectPending();
         await signInWithRedirect(auth, googleProvider);
         return null;
       } else {
-        console.log('🪟 Using popup authentication for web');
         const result = await signInWithPopup(auth, googleProvider);
         return result.user;
       }
@@ -110,7 +105,6 @@ export const signInWithGoogle = async (forceRedirect = false) => {
 
     // Handle specific error cases
     if (error.code === 'auth/popup-blocked') {
-      console.log('🚫 Popup blocked, falling back to redirect');
       setRedirectPending();
       await signInWithRedirect(auth, googleProvider);
       return null;
@@ -133,9 +127,7 @@ export const signInWithGoogle = async (forceRedirect = false) => {
 // 🪟 Web-only popup login
 export const signInWithGooglePopup = async () => {
   try {
-    console.log('🪟 Forcing popup authentication');
     const result = await signInWithPopup(auth, googleProvider);
-    console.log('✅ Popup authentication successful');
     return result.user;
   } catch (error) {
     if (error.code === 'auth/popup-blocked') {
@@ -152,17 +144,14 @@ export const signInWithGooglePopup = async () => {
 export const handleRedirectResult = async () => {
   try {
     if (!isRedirectPending()) {
-      console.log('No redirect pending, skipping.');
       return null;
     }
 
     const result = await getRedirectResult(auth);
     if (result?.user) {
       clearRedirectPending();
-      console.log('✅ Redirect authentication successful');
       return result.user;
     } else {
-      console.log('Redirect result pending or empty');
       return null;
     }
   } catch (error) {
@@ -176,7 +165,6 @@ export const handleRedirectResult = async () => {
     ];
 
     if (ignorableErrors.includes(error.code)) {
-      console.log('User cancelled authentication or no current user');
       return null;
     }
 
@@ -197,14 +185,12 @@ export const signOutUser = async () => {
     if (Capacitor.isNativePlatform()) {
       try {
         await GoogleAuth.signOut();
-        console.log('✅ Native Google Sign-Out successful');
       } catch (error) {
         console.warn('⚠️ Native Google Sign-Out warning:', error);
         // Don't throw - Firebase sign-out was successful
       }
     }
     
-    console.log('✅ User signed out successfully');
   } catch (error) {
     console.error('Sign out error:', error);
     throw error;
